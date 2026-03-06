@@ -43,10 +43,10 @@ fn validate_uid(uid: &str) -> Result<(), AppError> {
     Ok(())
 }
 
-pub async fn verify_page(State(state): State<Arc<AppState>>) -> Html<String> {
-    let login_url = format!("{}/verify/login", state.config.base_url);
+pub fn render_verify_page(base_url: &str) -> String {
+    let login_url = format!("{base_url}/verify/login");
 
-    Html(format!(
+    format!(
         r#"<!DOCTYPE html>
 <html>
 <head>
@@ -321,7 +321,11 @@ pub async fn verify_page(State(state): State<Arc<AppState>>) -> Html<String> {
     </script>
 </body>
 </html>"#
-    ))
+    )
+}
+
+pub async fn verify_page(State(state): State<Arc<AppState>>) -> Html<String> {
+    Html(state.verify_html.clone())
 }
 
 pub async fn login(State(state): State<Arc<AppState>>) -> Response {
@@ -387,7 +391,7 @@ pub async fn callback(
         .await?;
 
     // Exchange code for token and get user info
-    let oauth = DiscordOAuth::new();
+    let oauth = DiscordOAuth::with_client(state.oauth_http.clone());
     let access_token = oauth.exchange_code(&state.config, &code).await?;
     let (discord_id, display_name) = oauth.get_user(&access_token).await?;
 

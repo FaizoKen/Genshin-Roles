@@ -26,6 +26,8 @@ pub struct AppState {
     pub sync_tx: mpsc::Sender<SyncEvent>,
     pub enka_client: EnkaClient,
     pub rl_client: RoleLogicClient,
+    pub oauth_http: reqwest::Client,
+    pub verify_html: String,
 }
 
 #[tokio::main]
@@ -50,6 +52,11 @@ async fn main() {
 
     let enka_client = EnkaClient::new(&app_config.enka_user_agent);
     let rl_client = RoleLogicClient::new();
+    let oauth_http = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .expect("Failed to build OAuth HTTP client");
+    let verify_html = routes::verification::render_verify_page(&app_config.base_url);
 
     let state = Arc::new(AppState {
         pool,
@@ -57,6 +64,8 @@ async fn main() {
         sync_tx,
         enka_client,
         rl_client,
+        oauth_http,
+        verify_html,
     });
 
     tokio::spawn(tasks::refresh_worker::run(Arc::clone(&state)));
@@ -90,6 +99,12 @@ async fn main() {
         .expect("Failed to bind listener");
 
     axum::serve(listener, app)
+        .with_graceful_shutdown(async {
+            tokio::signal::ctrl_c().await.ok();
+            tracing::info!("Shutdown signal received, draining connections...");
+        })
         .await
         .expect("Server error");
+
+    tracing::info!("Server stopped");
 }

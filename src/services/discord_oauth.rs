@@ -23,10 +23,8 @@ pub struct DiscordOAuth {
 }
 
 impl DiscordOAuth {
-    pub fn new() -> Self {
-        Self {
-            http: reqwest::Client::new(),
-        }
+    pub fn with_client(http: reqwest::Client) -> Self {
+        Self { http }
     }
 
     pub fn authorize_url(config: &AppConfig, state: &str) -> String {
