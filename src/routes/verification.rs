@@ -14,7 +14,7 @@ use crate::services::discord_oauth::{self, DiscordOAuth};
 use crate::services::sync::SyncEvent;
 use crate::AppState;
 
-const SESSION_COOKIE: &str = "gpr_session";
+const SESSION_COOKIE: &str = "gr_session";
 
 /// Returns (discord_id, display_name)
 fn get_session(jar: &CookieJar, secret: &str) -> Result<(String, String), AppError> {
@@ -30,7 +30,7 @@ fn generate_code() -> String {
     let mut rng = rand::thread_rng();
     let chars: Vec<char> = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789".chars().collect();
     let code: String = (0..6).map(|_| chars[rng.gen_range(0..chars.len())]).collect();
-    format!("GPR-{code}")
+    format!("GR-{code}")
 }
 
 fn validate_uid(uid: &str) -> Result<(), AppError> {
@@ -52,7 +52,7 @@ pub async fn verify_page(State(state): State<Arc<AppState>>) -> Html<String> {
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Genshin Player Role - Link Account</title>
+    <title>Genshin Roles - Link Account</title>
     <style>
         * {{ box-sizing: border-box; margin: 0; padding: 0; }}
         body {{ font-family: system-ui, -apple-system, sans-serif; max-width: 580px; margin: 0 auto; padding: 32px 20px; background: #0e1525; color: #c8ccd4; min-height: 100vh; }}
@@ -88,6 +88,9 @@ pub async fn verify_page(State(state): State<Arc<AppState>>) -> Html<String> {
         .steps li {{ margin: 6px 0; font-size: 14px; line-height: 1.6; color: #94a3b8; }}
         .steps li strong {{ color: #e2e8f0; }}
         .note {{ font-size: 12px; color: #64748b; margin-top: 10px; font-style: italic; }}
+        .trust-note {{ font-size: 13px; color: #94a3b8; background: #111827; border-left: 3px solid #3b82f6; padding: 10px 14px; border-radius: 0 6px 6px 0; margin: 10px 0; line-height: 1.6; }}
+        .trust-note strong {{ color: #e2e8f0; }}
+        .trust-note a {{ color: #74b9ff; }}
         .info-row {{ display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 14px; }}
         .info-row .label {{ color: #64748b; min-width: 80px; }}
         .info-row .val {{ color: #e8b44a; font-weight: 600; }}
@@ -97,8 +100,11 @@ pub async fn verify_page(State(state): State<Arc<AppState>>) -> Html<String> {
     </style>
 </head>
 <body>
-    <h1>Genshin Player Role</h1>
-    <p class="subtitle">Link your Discord account with your Genshin Impact UID to receive server roles.</p>
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:4px;">
+        <h1 style="margin:0;">Genshin Roles</h1>
+        <span style="font-size:11px; color:#64748b; background:#1e293b; padding:2px 8px; border-radius:4px;">Powered by <a href="https://rolelogic.faizo.net" target="_blank" rel="noopener" style="color:#74b9ff; text-decoration:none;">RoleLogic</a></span>
+    </div>
+    <p class="subtitle">Link your Discord account with your Genshin Impact UID to automatically receive server roles based on your in-game progress.</p>
 
     <!-- Loading -->
     <div id="loading-section" class="card">
@@ -108,7 +114,8 @@ pub async fn verify_page(State(state): State<Arc<AppState>>) -> Html<String> {
     <!-- Login -->
     <div id="login-section" class="card hidden">
         <h2>Step 1: Sign in with Discord</h2>
-        <p>We only use this to verify your Discord identity. We cannot read your messages or access anything else.</p>
+        <p>Sign in so we know which Discord account to assign roles to.</p>
+        <p class="trust-note">We only request the <strong>identify</strong> scope — we cannot read your messages, join servers, or access anything else on your account.</p>
         <div class="actions">
             <a href="{login_url}" class="btn btn-discord">
                 <svg width="20" height="15" viewBox="0 0 71 55" fill="white"><path d="M60.1 4.9A58.5 58.5 0 0045.4.2a.2.2 0 00-.2.1 40.8 40.8 0 00-1.8 3.7 54 54 0 00-16.2 0A37.3 37.3 0 0025.4.3a.2.2 0 00-.2-.1A58.4 58.4 0 0010.6 4.9a.2.2 0 00-.1.1C1.5 18 -.9 30.6.3 43a.2.2 0 00.1.2 58.7 58.7 0 0017.7 9 .2.2 0 00.3-.1 42 42 0 003.6-5.9.2.2 0 00-.1-.3 38.6 38.6 0 01-5.5-2.6.2.2 0 01 0-.4l1.1-.9a.2.2 0 01.2 0 41.9 41.9 0 0035.6 0 .2.2 0 01.2 0l1.1.9a.2.2 0 010 .3 36.3 36.3 0 01-5.5 2.7.2.2 0 00-.1.3 47.2 47.2 0 003.6 5.9.2.2 0 00.3.1A58.5 58.5 0 0070.3 43a.2.2 0 00.1-.2c1.4-14.7-2.4-27.5-10.2-38.8a.2.2 0 00-.1 0zM23.7 35.3c-3.4 0-6.1-3.1-6.1-6.8s2.7-6.9 6.1-6.9 6.2 3.1 6.1 6.9c0 3.7-2.7 6.8-6.1 6.8zm22.6 0c-3.4 0-6.1-3.1-6.1-6.8s2.7-6.9 6.1-6.9 6.2 3.1 6.1 6.9c0 3.7-2.7 6.8-6.1 6.8z"/></svg>
@@ -125,7 +132,7 @@ pub async fn verify_page(State(state): State<Arc<AppState>>) -> Html<String> {
         </div>
         <div class="info-row"><span class="label">Genshin</span> <span class="val" id="linked-uid"></span></div>
         <div class="info-row"><span class="label">Discord</span> <span class="val" id="linked-discord" style="color:#94a3b8;font-weight:400;font-size:13px;"></span></div>
-        <p style="color:#4ade80; margin-top:12px; font-size:13px;">Roles are assigned automatically based on your player data.</p>
+        <p style="color:#4ade80; margin-top:12px; font-size:13px;">Your roles are assigned automatically based on your player data.</p>
         <p class="note">You can safely change your in-game signature back now.</p>
         <hr class="divider">
         <div class="actions">
@@ -137,12 +144,12 @@ pub async fn verify_page(State(state): State<Arc<AppState>>) -> Html<String> {
     <div id="uid-section" class="card hidden">
         <h2>Step 2: Enter Your Genshin UID</h2>
         <p>Signed in as <span id="uid-discord" style="color:#74b9ff;"></span></p>
-        <p style="margin-bottom:12px;">You can find your UID at the bottom of the in-game screen or in the Paimon Menu.</p>
+        <p style="margin-bottom:12px;">Your UID is the number at the bottom-right of the in-game screen, or in the Paimon Menu.</p>
         <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
             <input type="text" id="uid-input" placeholder="e.g. 800000001" maxlength="10" inputmode="numeric" />
             <button class="btn btn-primary" onclick="doStart()">Continue</button>
         </div>
-        <p class="note">Your UID is 9 or 10 digits. It is NOT the same as your username.</p>
+        <p class="trust-note">We only read your public profile (Adventure Rank, achievements, etc.) using <a href="https://enka.network" target="_blank" rel="noopener">Enka.Network</a> — a widely used, read-only Genshin API. We have no access to your account, password, or any private data.</p>
     </div>
 
     <!-- Verify -->
@@ -151,21 +158,20 @@ pub async fn verify_page(State(state): State<Arc<AppState>>) -> Html<String> {
             <h2 style="margin:0;">Step 3: Verify Ownership</h2>
             <span class="badge badge-wait">Pending</span>
         </div>
-        <p>Copy this code and set it as your <strong style="color:#e2e8f0;">in-game signature</strong>:</p>
+        <p class="trust-note" style="margin-bottom:12px;">To make sure this UID belongs to you, we need you to temporarily place a short code in your in-game signature. This is a standard verification method used by many Genshin community tools — it does not affect your account in any way.</p>
+        <p>Set this code as your <strong style="color:#e2e8f0;">in-game signature</strong>:</p>
         <div class="code-box">
             <span class="code" id="verify-code"></span>
         </div>
         <p style="font-size:13px; color:#64748b;">Verifying UID: <span id="verify-uid" style="color:#74b9ff;"></span></p>
         <ol class="steps">
             <li>Open <strong>Genshin Impact</strong></li>
-            <li>Open <strong>Paimon Menu</strong>, click your avatar (top-left) to open your profile</li>
+            <li>Go to <strong>Paimon Menu</strong> and tap your avatar (top-left)</li>
             <li>Tap the pencil icon next to <strong>Signature</strong></li>
             <li>Paste or type the code above, then <strong>save</strong></li>
-            <li>Wait about 30 seconds for the data to refresh</li>
             <li>Come back here and click <strong>Verify Now</strong></li>
         </ol>
-        <p class="note">You can remove the code from your signature after verification is complete.</p>
-        <p class="note">The code expires in 15 minutes.</p>
+        <p class="note">You can remove the code from your signature right after verification.</p>
         <div class="actions">
             <button class="btn btn-success" id="verify-btn" onclick="doCheck()">Verify Now</button>
             <button class="btn btn-secondary" onclick="showSection('uid-section')">Change UID</button>

@@ -13,6 +13,9 @@ pub enum AppError {
     #[error("RoleLogic API error: {0}")]
     RoleLogic(String),
 
+    #[error("Role link user limit reached ({limit})")]
+    UserLimitReached { limit: usize },
+
     #[error("Invalid request: {0}")]
     BadRequest(String),
 
@@ -71,6 +74,10 @@ impl IntoResponse for AppError {
             AppError::RoleLogic(e) => {
                 tracing::error!("RoleLogic API error: {e}");
                 (StatusCode::BAD_GATEWAY, "Failed to sync roles")
+            }
+            AppError::UserLimitReached { limit } => {
+                tracing::warn!("Role link user limit reached: {limit}");
+                (StatusCode::FORBIDDEN, "Role link user limit reached")
             }
             AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.as_str()),
             AppError::Unauthorized => (StatusCode::UNAUTHORIZED, "Invalid or missing authorization"),

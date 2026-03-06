@@ -27,8 +27,8 @@ pub fn build_config_schema(conditions: &[Condition], verify_url: &str) -> Value 
 
     json!({
         "version": 1,
-        "name": "Genshin Player Role",
-        "description": "Assign a Discord role based on Genshin Impact player stats.",
+        "name": "Genshin Roles",
+        "description": "Assign Discord roles based on Genshin Impact player stats.",
         "sections": [
             {
                 "title": "Getting Started",
