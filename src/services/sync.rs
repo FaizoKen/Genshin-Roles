@@ -1,3 +1,6 @@
+use std::collections::HashSet;
+
+use futures::TryStreamExt;
 use sqlx::PgPool;
 
 use crate::error::AppError;
@@ -40,18 +43,19 @@ pub async fn sync_for_player(
     .fetch_all(pool)
     .await?;
 
+    // Batch: fetch all existing assignments for this user in ONE query
+    let existing: HashSet<(String, String)> = sqlx::query_as::<_, (String, String)>(
+        "SELECT guild_id, role_id FROM role_assignments WHERE discord_id = $1",
+    )
+    .bind(discord_id)
+    .fetch_all(pool)
+    .await?
+    .into_iter()
+    .collect();
+
     for (guild_id, role_id, api_token, conditions) in &role_links {
         let qualifies = evaluate_conditions(conditions, &player_info, region.as_deref());
-
-        let currently_assigned = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS(SELECT 1 FROM role_assignments WHERE guild_id = $1 AND role_id = $2 AND discord_id = $3)",
-        )
-        .bind(guild_id)
-        .bind(role_id)
-        .bind(discord_id)
-        .fetch_one(pool)
-        .await
-        .unwrap_or(false);
+        let currently_assigned = existing.contains(&(guild_id.clone(), role_id.clone()));
 
         match (qualifies, currently_assigned) {
             (true, false) => {
@@ -131,23 +135,21 @@ pub async fn sync_for_role_link(
         .await
         .unwrap_or((0, 100)); // Default to 100 (free plan) if query fails
 
-    // Get all linked players with cached data, ordered by linked_at for FIFO priority
-    let players = sqlx::query_as::<_, (String, serde_json::Value, Option<String>)>(
+    // Stream player data row-by-row to avoid loading all JSONB blobs into memory
+    let mut stream = sqlx::query_as::<_, (String, serde_json::Value, Option<String>)>(
         "SELECT la.discord_id, pc.player_info, pc.region \
          FROM linked_accounts la \
          JOIN player_cache pc ON pc.uid = la.uid \
          ORDER BY la.linked_at ASC",
     )
-    .fetch_all(pool)
-    .await?;
+    .fetch(pool);
 
-    let qualifying_ids: Vec<String> = players
-        .into_iter()
-        .filter(|(_, player_info, region)| {
-            evaluate_conditions(&conditions, player_info, region.as_deref())
-        })
-        .map(|(discord_id, _, _)| discord_id)
-        .collect();
+    let mut qualifying_ids: Vec<String> = Vec::new();
+    while let Some((discord_id, player_info, region)) = stream.try_next().await? {
+        if evaluate_conditions(&conditions, &player_info, region.as_deref()) {
+            qualifying_ids.push(discord_id);
+        }
+    }
 
     let total_qualifying = qualifying_ids.len();
 
@@ -174,13 +176,14 @@ pub async fn sync_for_role_link(
         .execute(&mut *tx)
         .await?;
 
-    for user_id in &synced_ids {
+    if !synced_ids.is_empty() {
         sqlx::query(
-            "INSERT INTO role_assignments (guild_id, role_id, discord_id) VALUES ($1, $2, $3)",
+            "INSERT INTO role_assignments (guild_id, role_id, discord_id) \
+             SELECT $1, $2, UNNEST($3::text[])",
         )
         .bind(guild_id)
         .bind(role_id)
-        .bind(user_id)
+        .bind(&synced_ids)
         .execute(&mut *tx)
         .await?;
     }
