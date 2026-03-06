@@ -1,4 +1,8 @@
+use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Arc;
+use std::time::Instant;
+
+use tokio::sync::Mutex;
 
 use crate::error::EnkaError;
 use crate::services::sync::SyncEvent;
@@ -9,27 +13,48 @@ use crate::AppState;
 const MAX_REQUESTS_PER_HOUR: i64 = 60;
 const MIN_REFRESH_SECS: i64 = 1800; // 30 min floor
 const MAX_REFRESH_SECS: i64 = 86400; // 24 hour cap
+const INTERVAL_CACHE_SECS: u64 = 300; // recompute every 5 minutes
 
-async fn compute_refresh_interval(pool: &sqlx::PgPool) -> i64 {
-    let player_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM linked_accounts",
-    )
-    .fetch_one(pool)
-    .await
-    .unwrap_or(0);
+/// Caches the refresh interval to avoid running COUNT(*) on every fetch cycle.
+struct CachedInterval {
+    value: AtomicI64,
+    last_computed: Mutex<Instant>,
+}
 
-    if player_count == 0 {
-        return MIN_REFRESH_SECS;
+impl CachedInterval {
+    fn new() -> Self {
+        Self {
+            value: AtomicI64::new(MIN_REFRESH_SECS),
+            // Start in the past so the first call triggers a recompute
+            last_computed: Mutex::new(Instant::now() - std::time::Duration::from_secs(INTERVAL_CACHE_SECS + 1)),
+        }
     }
 
-    // Each player refreshed once per interval.
-    // interval = player_count * 3600 / MAX_REQUESTS_PER_HOUR
-    let computed = (player_count * 3600) / MAX_REQUESTS_PER_HOUR;
-    computed.clamp(MIN_REFRESH_SECS, MAX_REFRESH_SECS)
+    async fn get(&self, pool: &sqlx::PgPool) -> i64 {
+        let mut last = self.last_computed.lock().await;
+        if last.elapsed() >= std::time::Duration::from_secs(INTERVAL_CACHE_SECS) {
+            let player_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM linked_accounts")
+                .fetch_one(pool)
+                .await
+                .unwrap_or(0);
+
+            let interval = if player_count == 0 {
+                MIN_REFRESH_SECS
+            } else {
+                ((player_count * 3600) / MAX_REQUESTS_PER_HOUR).clamp(MIN_REFRESH_SECS, MAX_REFRESH_SECS)
+            };
+
+            self.value.store(interval, Ordering::Relaxed);
+            *last = Instant::now();
+        }
+        self.value.load(Ordering::Relaxed)
+    }
 }
 
 pub async fn run(state: Arc<AppState>) {
     tracing::info!("Refresh worker started");
+
+    let cached_interval = CachedInterval::new();
 
     loop {
         // Wait for rate limiter
@@ -64,8 +89,8 @@ pub async fn run(state: Arc<AppState>) {
 
         match state.enka_client.fetch_player_info(&uid).await {
             Ok(response) => {
-                // Scale refresh interval based on total player count
-                let interval = compute_refresh_interval(&state.pool).await;
+                // Scale refresh interval based on total player count (cached)
+                let interval = cached_interval.get(&state.pool).await;
                 let ttl = (response.ttl as i64).max(interval);
                 let next_fetch = chrono::Utc::now() + chrono::Duration::seconds(ttl);
 
