@@ -13,5 +13,10 @@ pub async fn run_migrations(pool: &PgPool) {
     sqlx::raw_sql(include_str!("../migrations/001_initial_schema.sql"))
         .execute(pool)
         .await
-        .expect("Failed to run migrations");
+        .expect("Failed to run migration 001");
+
+    sqlx::raw_sql(include_str!("../migrations/002_add_indexes.sql"))
+        .execute(pool)
+        .await
+        .expect("Failed to run migration 002");
 }
