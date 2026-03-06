@@ -4,6 +4,30 @@ use crate::error::EnkaError;
 use crate::services::sync::SyncEvent;
 use crate::AppState;
 
+/// Target: max 60 Enka requests per hour (well within limits).
+/// Interval scales with player count so load stays constant.
+const MAX_REQUESTS_PER_HOUR: i64 = 60;
+const MIN_REFRESH_SECS: i64 = 1800; // 30 min floor
+const MAX_REFRESH_SECS: i64 = 86400; // 24 hour cap
+
+async fn compute_refresh_interval(pool: &sqlx::PgPool) -> i64 {
+    let player_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM linked_accounts",
+    )
+    .fetch_one(pool)
+    .await
+    .unwrap_or(0);
+
+    if player_count == 0 {
+        return MIN_REFRESH_SECS;
+    }
+
+    // Each player refreshed once per interval.
+    // interval = player_count * 3600 / MAX_REQUESTS_PER_HOUR
+    let computed = (player_count * 3600) / MAX_REQUESTS_PER_HOUR;
+    computed.clamp(MIN_REFRESH_SECS, MAX_REFRESH_SECS)
+}
+
 pub async fn run(state: Arc<AppState>) {
     tracing::info!("Refresh worker started");
 
@@ -26,7 +50,7 @@ pub async fn run(state: Arc<AppState>) {
             Ok(Some(row)) => row,
             Ok(None) => {
                 // Nothing to refresh, sleep
-                tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+                tokio::time::sleep(std::time::Duration::from_secs(30)).await;
                 continue;
             }
             Err(e) => {
@@ -40,8 +64,10 @@ pub async fn run(state: Arc<AppState>) {
 
         match state.enka_client.fetch_player_info(&uid).await {
             Ok(response) => {
-                let ttl = response.ttl.max(60);
-                let next_fetch = chrono::Utc::now() + chrono::Duration::seconds(ttl as i64);
+                // Scale refresh interval based on total player count
+                let interval = compute_refresh_interval(&state.pool).await;
+                let ttl = (response.ttl as i64).max(interval);
+                let next_fetch = chrono::Utc::now() + chrono::Duration::seconds(ttl);
 
                 if let Err(e) = sqlx::query(
                     "UPDATE player_cache SET \
@@ -51,7 +77,7 @@ pub async fn run(state: Arc<AppState>) {
                 )
                 .bind(&response.player_info)
                 .bind(&response.region)
-                .bind(ttl)
+                .bind(ttl as i32)
                 .bind(next_fetch)
                 .bind(&uid)
                 .execute(&state.pool)

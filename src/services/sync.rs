@@ -55,12 +55,22 @@ pub async fn sync_for_player(
 
         match (qualifies, currently_assigned) {
             (true, false) => {
-                if let Err(e) = rl_client.add_user(guild_id, role_id, discord_id, api_token).await {
-                    tracing::error!(
-                        guild_id, role_id, discord_id,
-                        "Failed to add user to role: {e}"
-                    );
-                    continue;
+                match rl_client.add_user(guild_id, role_id, discord_id, api_token).await {
+                    Err(AppError::UserLimitReached { limit }) => {
+                        tracing::warn!(
+                            guild_id, role_id, discord_id, limit,
+                            "Cannot add user: role link user limit reached"
+                        );
+                        continue;
+                    }
+                    Err(e) => {
+                        tracing::error!(
+                            guild_id, role_id, discord_id,
+                            "Failed to add user to role: {e}"
+                        );
+                        continue;
+                    }
+                    Ok(_) => {}
                 }
                 sqlx::query(
                     "INSERT INTO role_assignments (guild_id, role_id, discord_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
@@ -96,7 +106,7 @@ pub async fn sync_for_player(
 }
 
 /// Re-evaluate all users for a specific role link (after config change).
-/// Uses atomic PUT to replace entire user list.
+/// Uses atomic PUT to replace entire user list, respecting the role link's user limit.
 pub async fn sync_for_role_link(
     guild_id: &str,
     role_id: &str,
@@ -115,11 +125,18 @@ pub async fn sync_for_role_link(
         return Ok(());
     };
 
-    // Get all linked players with cached data
+    // Query the user limit from RoleLogic
+    let (_user_count, user_limit) = rl_client
+        .get_user_info(guild_id, role_id, &api_token)
+        .await
+        .unwrap_or((0, 100)); // Default to 100 (free plan) if query fails
+
+    // Get all linked players with cached data, ordered by linked_at for FIFO priority
     let players = sqlx::query_as::<_, (String, serde_json::Value, Option<String>)>(
         "SELECT la.discord_id, pc.player_info, pc.region \
          FROM linked_accounts la \
-         JOIN player_cache pc ON pc.uid = la.uid",
+         JOIN player_cache pc ON pc.uid = la.uid \
+         ORDER BY la.linked_at ASC",
     )
     .fetch_all(pool)
     .await?;
@@ -132,12 +149,24 @@ pub async fn sync_for_role_link(
         .map(|(discord_id, _, _)| discord_id)
         .collect();
 
+    let total_qualifying = qualifying_ids.len();
+
+    // Truncate to user limit (FIFO: earliest-linked users get priority)
+    let synced_ids: Vec<String> = qualifying_ids.into_iter().take(user_limit).collect();
+
+    if total_qualifying > user_limit {
+        tracing::warn!(
+            guild_id, role_id, total_qualifying, user_limit,
+            "Role link user limit reached: {total_qualifying} users qualify but limit is {user_limit}, synced first {user_limit}"
+        );
+    }
+
     // Atomic replace
     rl_client
-        .replace_users(guild_id, role_id, &qualifying_ids, &api_token)
+        .replace_users(guild_id, role_id, &synced_ids, &api_token)
         .await?;
 
-    // Update local assignments to match
+    // Update local assignments to match what was actually sent
     let mut tx = pool.begin().await?;
     sqlx::query("DELETE FROM role_assignments WHERE guild_id = $1 AND role_id = $2")
         .bind(guild_id)
@@ -145,7 +174,7 @@ pub async fn sync_for_role_link(
         .execute(&mut *tx)
         .await?;
 
-    for user_id in &qualifying_ids {
+    for user_id in &synced_ids {
         sqlx::query(
             "INSERT INTO role_assignments (guild_id, role_id, discord_id) VALUES ($1, $2, $3)",
         )

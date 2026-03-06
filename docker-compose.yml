@@ -4,11 +4,11 @@ services:
     ports:
       - "8080:8080"
     environment:
-      DATABASE_URL: postgres://gpr:password@db:5432/genshin_player_role
+      DATABASE_URL: postgres://gpr:password@db:5432/genshin_roles
       DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID}
       DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET}
       SESSION_SECRET: ${SESSION_SECRET}
-      ENKA_USER_AGENT: ${ENKA_USER_AGENT:-GenshinPlayerRole/1.0}
+      ENKA_USER_AGENT: ${ENKA_USER_AGENT:-GenshinRoles/1.0}
       BASE_URL: ${BASE_URL}
       LISTEN_ADDR: "0.0.0.0:8080"
     depends_on:
@@ -19,7 +19,7 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: genshin_player_role
+      POSTGRES_DB: genshin_roles
       POSTGRES_USER: gpr
       POSTGRES_PASSWORD: password
     volumes:

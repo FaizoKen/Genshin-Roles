@@ -18,6 +18,45 @@ impl RoleLogicClient {
         }
     }
 
+    /// Get user count and limit for a role link.
+    pub async fn get_user_info(
+        &self,
+        guild_id: &str,
+        role_id: &str,
+        token: &str,
+    ) -> Result<(usize, usize), AppError> {
+        let url = format!(
+            "{}/api/role-link/{}/{}/users",
+            self.base_url, guild_id, role_id
+        );
+
+        let resp = self
+            .http
+            .get(&url)
+            .header("Authorization", format!("Token {token}"))
+            .send()
+            .await
+            .map_err(|e| AppError::RoleLogic(e.to_string()))?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            return Err(AppError::RoleLogic(format!(
+                "Get user info failed: {status} - {body}"
+            )));
+        }
+
+        let body: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| AppError::RoleLogic(e.to_string()))?;
+
+        let user_count = body["data"]["user_count"].as_u64().unwrap_or(0) as usize;
+        let user_limit = body["data"]["user_limit"].as_u64().unwrap_or(100) as usize;
+
+        Ok((user_count, user_limit))
+    }
+
     pub async fn add_user(
         &self,
         guild_id: &str,
@@ -41,6 +80,14 @@ impl RoleLogicClient {
         if !resp.status().is_success() {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
+
+            // Detect user limit errors (403 with limit info)
+            if status == reqwest::StatusCode::FORBIDDEN && body.contains("limit") {
+                let parsed: serde_json::Value = serde_json::from_str(&body).unwrap_or_default();
+                let limit = parsed["data"]["user_limit"].as_u64().unwrap_or(100) as usize;
+                return Err(AppError::UserLimitReached { limit });
+            }
+
             return Err(AppError::RoleLogic(format!(
                 "Add user failed: {status} - {body}"
             )));
