@@ -28,7 +28,7 @@ pub struct AppState {
     pub enka_client: EnkaClient,
     pub rl_client: RoleLogicClient,
     pub oauth_http: reqwest::Client,
-    pub verify_html: String,
+    pub verify_html: bytes::Bytes,
 }
 
 #[tokio::main]
@@ -58,7 +58,7 @@ async fn main() {
         .timeout(std::time::Duration::from_secs(10))
         .build()
         .expect("Failed to build OAuth HTTP client");
-    let verify_html = routes::verification::render_verify_page(&app_config.base_url);
+    let verify_html = bytes::Bytes::from(routes::verification::render_verify_page(&app_config.base_url));
 
     let state = Arc::new(AppState {
         pool,
