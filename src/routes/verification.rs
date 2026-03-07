@@ -157,7 +157,7 @@ pub fn render_verify_page(base_url: &str) -> String {
         <p style="margin-bottom:12px;">Your UID is the number at the bottom-right of the in-game screen, or in the Paimon Menu.</p>
         <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
             <input type="text" id="uid-input" placeholder="e.g. 800000001" maxlength="10" inputmode="numeric" />
-            <button class="btn btn-primary" onclick="doStart()">Continue</button>
+            <button class="btn btn-primary" id="start-btn" onclick="doStart()">Continue</button>
         </div>
         <p class="trust-note">We only read your public profile (Adventure Rank, achievements, etc.) using <a href="https://enka.network" target="_blank" rel="noopener">Enka.Network</a> — a widely used, read-only Genshin API. We have no access to your account, password, or any private data.</p>
     </div>
@@ -179,7 +179,7 @@ pub fn render_verify_page(base_url: &str) -> String {
             <li>Go to <strong>Paimon Menu</strong> and tap your avatar (top-left)</li>
             <li>Tap the pencil icon next to your name and edit <strong>Signature</strong></li>
             <li>Paste or type the code above, then <strong>save</strong></li>
-            <li>Click <strong>logout</strong> (optional but recommended for a quick refresh)</li>
+            <li>Click <strong>Quit Game</strong> (optional but recommended for a quick refresh)</li>
             <li>Come back here and click <strong>Verify Now</strong></li>
         </ol>
         <p class="note">You can remove the code from your signature right after verification.</p>
@@ -255,6 +255,8 @@ pub fn render_verify_page(base_url: &str) -> String {
         const uid = document.getElementById('uid-input').value.trim();
         if (!uid) return showMsg('Please enter your UID.', 'error');
         if (!/^\d{{9,10}}$/.test(uid)) return showMsg('UID must be 9 or 10 digits.', 'error');
+        const btn = document.getElementById('start-btn');
+        btn.disabled = true; btn.textContent = 'Looking up...';
         try {{
             const res = await api('POST', '/verify/start', {{ uid }});
             document.getElementById('verify-code').textContent = res.code;
@@ -263,6 +265,7 @@ pub fn render_verify_page(base_url: &str) -> String {
                 : res.uid;
             showSection('verify-section');
         }} catch (e) {{ showMsg(e.message, 'error'); }}
+        btn.disabled = false; btn.textContent = 'Continue';
     }}
 
     let currentName = '';
