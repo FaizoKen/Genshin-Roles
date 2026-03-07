@@ -18,9 +18,13 @@ pub fn build_config_schema(conditions: &[Condition], verify_url: &str) -> Value 
     );
     values.insert(
         "value".to_string(),
-        match c.map(|c| &c.value) {
-            Some(Value::Number(n)) => json!(n.to_string()),
-            Some(Value::String(s)) => json!(s),
+        match c {
+            Some(c) if matches!(c.field, ConditionField::SpiralAbyss) => {
+                let n = c.value.as_i64().unwrap_or(0);
+                json!(format!("{}-{}", n / 10, n % 10))
+            }
+            Some(Condition { value: Value::Number(n), .. }) => json!(n.to_string()),
+            Some(Condition { value: Value::String(s), .. }) => json!(s),
             _ => json!(""),
         },
     );
@@ -59,12 +63,11 @@ pub fn build_config_schema(conditions: &[Condition], verify_url: &str) -> Value 
                             {"label": "Adventure Rank", "value": "level"},
                             {"label": "World Level (0-8)", "value": "worldLevel"},
                             {"label": "Achievements Completed", "value": "finishAchievementNum"},
-                            {"label": "Spiral Abyss - Floor Reached", "value": "towerFloorIndex"},
-                            {"label": "Spiral Abyss - Chamber Reached", "value": "towerLevelIndex"},
-                            {"label": "Friendship Count", "value": "fetterCount"},
+                            {"label": "Spiral Abyss Progress (e.g. 12-3)", "value": "spiralAbyss"},
+                            {"label": "Max Friendship Characters", "value": "fetterCount"},
                             {"label": "Server Region (NA, EU, ASIA, TW, CN)", "value": "region"},
-                            {"label": "Owns Character (by Avatar ID)", "value": "hasAvatar"},
-                            {"label": "Owns Namecard (by Namecard ID)", "value": "hasNameCard"}
+                            {"label": "Showcased Character (by Avatar ID)", "value": "hasAvatar"},
+                            {"label": "Showcased Namecard (by Namecard ID)", "value": "hasNameCard"}
                         ],
                         "validation": { "required": true }
                     },
@@ -86,8 +89,8 @@ pub fn build_config_schema(conditions: &[Condition], verify_url: &str) -> Value 
                         "type": "text",
                         "key": "value",
                         "label": "Value",
-                        "description": "Enter a number (e.g. 50 for AR 50). For Region enter: NA, EU, ASIA, TW, or CN.",
-                        "placeholder": "e.g. 50",
+                        "description": "Enter a number (e.g. 50 for AR 50). For Spiral Abyss use floor-chamber (e.g. 12-3). For Region: NA, EU, ASIA, TW, or CN.",
+                        "placeholder": "e.g. 50 or 12-3",
                         "validation": { "required": true, "max": 100 }
                     }
                 ]
@@ -99,7 +102,7 @@ pub fn build_config_schema(conditions: &[Condition], verify_url: &str) -> Value 
                         "type": "display",
                         "key": "examples",
                         "label": "Common setups",
-                        "value": "Adventure Rank >= 50  -  AR 50 and above\nWorld Level = 8  -  Max world level only\nAchievements Completed >= 500  -  500+ achievements\nSpiral Abyss Floor >= 12  -  Reached floor 12\nServer Region = ASIA  -  Asia server players"
+                        "value": "Adventure Rank >= 50  -  AR 50 and above\nWorld Level = 8  -  Max world level only\nAchievements Completed >= 500  -  500+ achievements\nSpiral Abyss >= 12-3  -  Cleared floor 12 chamber 3\nServer Region = ASIA  -  Asia server players"
                     }
                 ]
             }
@@ -148,7 +151,26 @@ pub fn parse_config(config: &HashMap<String, Value>) -> Result<Vec<Condition>, A
         ));
     }
 
-    let value = if field.is_numeric()
+    let value = if matches!(field, ConditionField::SpiralAbyss) {
+        let parts: Vec<&str> = value_str.split('-').collect();
+        if parts.len() != 2 {
+            return Err(AppError::BadRequest(
+                "Spiral Abyss value must be in floor-chamber format (e.g. 12-3)".into(),
+            ));
+        }
+        let floor: i64 = parts[0].trim().parse().map_err(|_| {
+            AppError::BadRequest("Floor must be a number (e.g. 12-3)".into())
+        })?;
+        let chamber: i64 = parts[1].trim().parse().map_err(|_| {
+            AppError::BadRequest("Chamber must be a number (e.g. 12-3)".into())
+        })?;
+        if !(1..=12).contains(&floor) || !(1..=3).contains(&chamber) {
+            return Err(AppError::BadRequest(
+                "Floor must be 1-12 and chamber must be 1-3".into(),
+            ));
+        }
+        serde_json::Value::Number((floor * 10 + chamber).into())
+    } else if field.is_numeric()
         || matches!(field, ConditionField::HasAvatar | ConditionField::HasNameCard)
     {
         let n: i64 = value_str
