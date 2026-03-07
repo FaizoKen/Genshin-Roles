@@ -33,6 +33,21 @@ impl ConditionField {
         }
     }
 
+    /// Returns the PostgreSQL column name for extracted fields,
+    /// or None for fields that require JSONB queries (HasAvatar, HasNameCard).
+    pub fn sql_column(&self) -> Option<&'static str> {
+        match self {
+            Self::Level => Some("pc.level"),
+            Self::WorldLevel => Some("pc.world_level"),
+            Self::FinishAchievementNum => Some("pc.achievements"),
+            Self::TowerFloorIndex => Some("pc.tower_floor"),
+            Self::TowerLevelIndex => Some("pc.tower_level"),
+            Self::FetterCount => Some("pc.fetter_count"),
+            Self::Region => Some("pc.region"),
+            Self::HasAvatar | Self::HasNameCard => None,
+        }
+    }
+
     pub fn from_key(key: &str) -> Option<Self> {
         match key {
             "level" => Some(Self::Level),
@@ -78,6 +93,16 @@ impl ConditionOperator {
             Self::Gte => "gte",
             Self::Lt => "lt",
             Self::Lte => "lte",
+        }
+    }
+
+    pub fn sql_operator(&self) -> &'static str {
+        match self {
+            Self::Eq => "=",
+            Self::Gt => ">",
+            Self::Gte => ">=",
+            Self::Lt => "<",
+            Self::Lte => "<=",
         }
     }
 }

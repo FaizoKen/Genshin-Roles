@@ -9,6 +9,7 @@ type HmacSha256 = Hmac<Sha256>;
 #[derive(serde::Deserialize)]
 struct TokenResponse {
     access_token: String,
+    refresh_token: Option<String>,
 }
 
 #[derive(serde::Deserialize)]
@@ -16,6 +17,11 @@ struct DiscordUser {
     id: String,
     username: String,
     global_name: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+struct DiscordGuild {
+    id: String,
 }
 
 pub struct DiscordOAuth {
@@ -30,18 +36,19 @@ impl DiscordOAuth {
     pub fn authorize_url(config: &AppConfig, state: &str) -> String {
         let redirect_uri = config.oauth_redirect_uri();
         format!(
-            "https://discord.com/oauth2/authorize?client_id={}&redirect_uri={}&response_type=code&scope=identify&state={}",
+            "https://discord.com/oauth2/authorize?client_id={}&redirect_uri={}&response_type=code&scope=identify%20guilds&state={}",
             config.discord_client_id,
             urlencoding::encode(&redirect_uri),
             state
         )
     }
 
+    /// Returns (access_token, Option<refresh_token>)
     pub async fn exchange_code(
         &self,
         config: &AppConfig,
         code: &str,
-    ) -> Result<String, AppError> {
+    ) -> Result<(String, Option<String>), AppError> {
         let resp: TokenResponse = self
             .http
             .post("https://discord.com/api/v10/oauth2/token")
@@ -59,7 +66,37 @@ impl DiscordOAuth {
             .await
             .map_err(|e| AppError::Internal(format!("Discord token parse failed: {e}")))?;
 
-        Ok(resp.access_token)
+        Ok((resp.access_token, resp.refresh_token))
+    }
+
+    /// Refresh an access token using a stored refresh token.
+    /// Returns (new_access_token, new_refresh_token).
+    /// Discord invalidates the old refresh token and issues a new one.
+    pub async fn refresh_access_token(
+        &self,
+        config: &AppConfig,
+        refresh_token: &str,
+    ) -> Result<(String, String), AppError> {
+        let resp: TokenResponse = self
+            .http
+            .post("https://discord.com/api/v10/oauth2/token")
+            .form(&[
+                ("grant_type", "refresh_token"),
+                ("refresh_token", refresh_token),
+                ("client_id", &config.discord_client_id),
+                ("client_secret", &config.discord_client_secret),
+            ])
+            .send()
+            .await
+            .map_err(|e| AppError::Internal(format!("Discord token refresh failed: {e}")))?
+            .json()
+            .await
+            .map_err(|e| AppError::Internal(format!("Discord token refresh parse failed: {e}")))?;
+
+        let new_refresh = resp.refresh_token
+            .ok_or_else(|| AppError::Internal("Discord token refresh returned no refresh_token".into()))?;
+
+        Ok((resp.access_token, new_refresh))
     }
 
     /// Returns (discord_id, display_name)
@@ -77,6 +114,22 @@ impl DiscordOAuth {
 
         let display_name = user.global_name.unwrap_or(user.username);
         Ok((user.id, display_name))
+    }
+
+    /// Returns list of guild IDs the user belongs to.
+    pub async fn get_user_guilds(&self, access_token: &str) -> Result<Vec<String>, AppError> {
+        let guilds: Vec<DiscordGuild> = self
+            .http
+            .get("https://discord.com/api/v10/users/@me/guilds")
+            .header("Authorization", format!("Bearer {access_token}"))
+            .send()
+            .await
+            .map_err(|e| AppError::Internal(format!("Discord guilds fetch failed: {e}")))?
+            .json()
+            .await
+            .map_err(|e| AppError::Internal(format!("Discord guilds parse failed: {e}")))?;
+
+        Ok(guilds.into_iter().map(|g| g.id).collect())
     }
 }
 

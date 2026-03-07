@@ -11,7 +11,7 @@ use serde_json::{json, Value};
 
 use crate::error::AppError;
 use crate::services::discord_oauth::{self, DiscordOAuth};
-use crate::services::sync::SyncEvent;
+use crate::services::sync::PlayerSyncEvent;
 use crate::AppState;
 
 const SESSION_COOKIE: &str = "gr_session";
@@ -125,7 +125,7 @@ pub fn render_verify_page(base_url: &str) -> String {
     <div id="login-section" class="card hidden">
         <h2>Step 1: Sign in with Discord</h2>
         <p>Sign in so we know which Discord account to assign roles to.</p>
-        <p class="trust-note">We only request the <strong>identify</strong> scope — we cannot read your messages, join servers, or access anything else on your account.</p>
+        <p class="trust-note">We request the <strong>identify</strong> and <strong>guilds</strong> scopes — we cannot read your messages, join servers, or access anything else on your account.</p>
         <div class="actions">
             <a href="{login_url}" class="btn btn-discord">
                 <svg width="20" height="15" viewBox="0 0 71 55" fill="white"><path d="M60.1 4.9A58.5 58.5 0 0045.4.2a.2.2 0 00-.2.1 40.8 40.8 0 00-1.8 3.7 54 54 0 00-16.2 0A37.3 37.3 0 0025.4.3a.2.2 0 00-.2-.1A58.4 58.4 0 0010.6 4.9a.2.2 0 00-.1.1C1.5 18 -.9 30.6.3 43a.2.2 0 00.1.2 58.7 58.7 0 0017.7 9 .2.2 0 00.3-.1 42 42 0 003.6-5.9.2.2 0 00-.1-.3 38.6 38.6 0 01-5.5-2.6.2.2 0 01 0-.4l1.1-.9a.2.2 0 01.2 0 41.9 41.9 0 0035.6 0 .2.2 0 01.2 0l1.1.9a.2.2 0 010 .3 36.3 36.3 0 01-5.5 2.7.2.2 0 00-.1.3 47.2 47.2 0 003.6 5.9.2.2 0 00.3.1A58.5 58.5 0 0070.3 43a.2.2 0 00.1-.2c1.4-14.7-2.4-27.5-10.2-38.8a.2.2 0 00-.1 0zM23.7 35.3c-3.4 0-6.1-3.1-6.1-6.8s2.7-6.9 6.1-6.9 6.2 3.1 6.1 6.9c0 3.7-2.7 6.8-6.1 6.8zm22.6 0c-3.4 0-6.1-3.1-6.1-6.8s2.7-6.9 6.1-6.9 6.2 3.1 6.1 6.9c0 3.7-2.7 6.8-6.1 6.8z"/></svg>
@@ -410,8 +410,54 @@ pub async fn callback(
 
     // Exchange code for token and get user info
     let oauth = DiscordOAuth::with_client(state.oauth_http.clone());
-    let access_token = oauth.exchange_code(&state.config, &code).await?;
+    let (access_token, refresh_token) = oauth.exchange_code(&state.config, &code).await?;
     let (discord_id, display_name) = oauth.get_user(&access_token).await?;
+
+    // Store refresh token for periodic guild refresh (best-effort)
+    if let Some(ref rt) = refresh_token {
+        if let Err(e) = sqlx::query(
+            "INSERT INTO discord_tokens (discord_id, refresh_token) VALUES ($1, $2) \
+             ON CONFLICT (discord_id) DO UPDATE SET refresh_token = $2",
+        )
+        .bind(&discord_id)
+        .bind(rt)
+        .execute(&state.pool)
+        .await
+        {
+            tracing::warn!(discord_id, "Failed to store refresh token: {e}");
+        }
+    }
+
+    // Fetch and store guild memberships (best-effort, don't block login on failure)
+    match oauth.get_user_guilds(&access_token).await {
+        Ok(guild_ids) if !guild_ids.is_empty() => {
+            let mut tx = state.pool.begin().await?;
+            sqlx::query("DELETE FROM user_guilds WHERE discord_id = $1")
+                .bind(&discord_id)
+                .execute(&mut *tx)
+                .await?;
+            sqlx::query(
+                "INSERT INTO user_guilds (discord_id, guild_id, updated_at) \
+                 SELECT $1, UNNEST($2::text[]), now()",
+            )
+            .bind(&discord_id)
+            .bind(&guild_ids)
+            .execute(&mut *tx)
+            .await?;
+            tx.commit().await?;
+            // Update guilds_refreshed_at timestamp
+            let _ = sqlx::query(
+                "UPDATE discord_tokens SET guilds_refreshed_at = now() WHERE discord_id = $1",
+            )
+            .bind(&discord_id)
+            .execute(&state.pool)
+            .await;
+        }
+        Ok(_) => {}
+        Err(e) => {
+            tracing::warn!(discord_id, "Failed to fetch user guilds: {e}");
+        }
+    }
 
     // Create session cookie
     let session_value = discord_oauth::sign_session(&discord_id, &display_name, &state.config.session_secret);
@@ -540,11 +586,20 @@ pub async fn start(
             let ttl = enka_result.ttl.max(60);
             let next_fetch = chrono::Utc::now() + chrono::Duration::seconds(ttl as i64);
             let _ = sqlx::query(
-                "INSERT INTO player_cache (uid, player_info, region, enka_ttl, next_fetch_at) \
-                 VALUES ($1, $2, $3, $4, $5) \
+                "INSERT INTO player_cache (uid, player_info, region, enka_ttl, next_fetch_at, \
+                 level, world_level, achievements, tower_floor, tower_level, fetter_count) \
+                 VALUES ($1, $2, $3, $4, $5, \
+                 COALESCE(($2->>'level')::int, 0), COALESCE(($2->>'worldLevel')::int, 0), \
+                 COALESCE(($2->>'finishAchievementNum')::int, 0), COALESCE(($2->>'towerFloorIndex')::int, 0), \
+                 COALESCE(($2->>'towerLevelIndex')::int, 0), COALESCE(($2->>'fetterCount')::int, 0)) \
                  ON CONFLICT (uid) DO UPDATE SET \
                  player_info = $2, region = $3, enka_ttl = $4, \
-                 fetched_at = now(), next_fetch_at = $5, fetch_failures = 0",
+                 fetched_at = now(), next_fetch_at = $5, fetch_failures = 0, \
+                 level = COALESCE(($2->>'level')::int, 0), world_level = COALESCE(($2->>'worldLevel')::int, 0), \
+                 achievements = COALESCE(($2->>'finishAchievementNum')::int, 0), \
+                 tower_floor = COALESCE(($2->>'towerFloorIndex')::int, 0), \
+                 tower_level = COALESCE(($2->>'towerLevelIndex')::int, 0), \
+                 fetter_count = COALESCE(($2->>'fetterCount')::int, 0)",
             )
             .bind(&body.uid)
             .bind(&enka_result.player_info)
@@ -641,11 +696,20 @@ pub async fn check(
     let next_fetch = chrono::Utc::now() + chrono::Duration::seconds(ttl as i64);
 
     sqlx::query(
-        "INSERT INTO player_cache (uid, player_info, region, enka_ttl, next_fetch_at) \
-         VALUES ($1, $2, $3, $4, $5) \
+        "INSERT INTO player_cache (uid, player_info, region, enka_ttl, next_fetch_at, \
+         level, world_level, achievements, tower_floor, tower_level, fetter_count) \
+         VALUES ($1, $2, $3, $4, $5, \
+         COALESCE(($2->>'level')::int, 0), COALESCE(($2->>'worldLevel')::int, 0), \
+         COALESCE(($2->>'finishAchievementNum')::int, 0), COALESCE(($2->>'towerFloorIndex')::int, 0), \
+         COALESCE(($2->>'towerLevelIndex')::int, 0), COALESCE(($2->>'fetterCount')::int, 0)) \
          ON CONFLICT (uid) DO UPDATE SET \
          player_info = $2, region = $3, enka_ttl = $4, \
-         fetched_at = now(), next_fetch_at = $5, fetch_failures = 0",
+         fetched_at = now(), next_fetch_at = $5, fetch_failures = 0, \
+         level = COALESCE(($2->>'level')::int, 0), world_level = COALESCE(($2->>'worldLevel')::int, 0), \
+         achievements = COALESCE(($2->>'finishAchievementNum')::int, 0), \
+         tower_floor = COALESCE(($2->>'towerFloorIndex')::int, 0), \
+         tower_level = COALESCE(($2->>'towerLevelIndex')::int, 0), \
+         fetter_count = COALESCE(($2->>'fetterCount')::int, 0)",
     )
     .bind(&uid)
     .bind(&enka_result.player_info)
@@ -663,8 +727,8 @@ pub async fn check(
 
     // Trigger role sync for this user
     let _ = state
-        .sync_tx
-        .send(SyncEvent::AccountLinked {
+        .player_sync_tx
+        .send(PlayerSyncEvent::AccountLinked {
             discord_id: discord_id.clone(),
         })
         .await;
@@ -701,8 +765,8 @@ pub async fn unlink(
 
     // Trigger removal from all roles
     let _ = state
-        .sync_tx
-        .send(SyncEvent::AccountUnlinked {
+        .player_sync_tx
+        .send(PlayerSyncEvent::AccountUnlinked {
             discord_id: discord_id.clone(),
         })
         .await;

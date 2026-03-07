@@ -1,5 +1,6 @@
 use crate::error::AppError;
 
+#[derive(Clone)]
 pub struct RoleLogicClient {
     http: reqwest::Client,
     base_url: String,
@@ -82,7 +83,9 @@ impl RoleLogicClient {
             let body = resp.text().await.unwrap_or_default();
 
             // Detect user limit errors (403 with limit info)
-            if status == reqwest::StatusCode::FORBIDDEN && body.contains("limit") {
+            if (status == reqwest::StatusCode::BAD_REQUEST || status == reqwest::StatusCode::FORBIDDEN)
+                && body.contains("limit")
+            {
                 let parsed: serde_json::Value = serde_json::from_str(&body).unwrap_or_default();
                 let limit = parsed["data"]["user_limit"].as_u64().unwrap_or(100) as usize;
                 return Err(AppError::UserLimitReached { limit });
