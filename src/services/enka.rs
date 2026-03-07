@@ -48,15 +48,15 @@ impl EnkaClient {
             code => return Err(EnkaError::Server(code)),
         }
 
-        let body: serde_json::Value = resp.json().await?;
-
-        let player_info = body
-            .get("playerInfo")
-            .cloned()
-            .unwrap_or(serde_json::Value::Object(Default::default()));
+        let mut body: serde_json::Value = resp.json().await?;
 
         let region = body.get("region").and_then(|v| v.as_str()).map(String::from);
         let ttl = body.get("ttl").and_then(|v| v.as_i64()).unwrap_or(60) as i32;
+
+        let player_info = body
+            .as_object_mut()
+            .and_then(|map| map.remove("playerInfo"))
+            .unwrap_or_default();
 
         Ok(EnkaResponse {
             player_info,

@@ -63,10 +63,7 @@ async fn pick_next_user(
            (EXISTS(SELECT 1 FROM role_assignments ra WHERE ra.discord_id = dt.discord_id) \
             AND dt.guilds_refreshed_at < now() - make_interval(hours => $1)) \
            OR dt.guilds_refreshed_at < now() - make_interval(hours => $2) \
-         ORDER BY \
-           (CASE WHEN EXISTS(SELECT 1 FROM role_assignments ra WHERE ra.discord_id = dt.discord_id) \
-            THEN 0 ELSE 1 END) ASC, \
-           dt.guilds_refreshed_at ASC \
+         ORDER BY dt.guilds_refreshed_at ASC \
          LIMIT 1",
     )
     .bind(ACTIVE_STALE_HOURS)
@@ -127,15 +124,16 @@ async fn refresh_user_guilds(
         .execute(&mut *tx)
         .await?;
     }
-    tx.commit().await?;
 
-    // Update timestamp
+    // Update timestamp within the same transaction
     sqlx::query(
         "UPDATE discord_tokens SET guilds_refreshed_at = now() WHERE discord_id = $1",
     )
     .bind(discord_id)
-    .execute(&state.pool)
+    .execute(&mut *tx)
     .await?;
+
+    tx.commit().await?;
 
     tracing::debug!(discord_id, guilds = guild_ids.len(), "Guild list refreshed");
     Ok(())

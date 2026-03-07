@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use futures::stream::{self, StreamExt};
+use futures_util::stream::{self, StreamExt};
 use sqlx::PgPool;
 
 use crate::error::AppError;

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use axum::extract::{Query, State};
 use axum::http::StatusCode;
-use axum::response::{Html, IntoResponse, Redirect, Response};
+use axum::response::{IntoResponse, Redirect, Response};
 use axum::Json;
 use axum_extra::extract::cookie::{Cookie, CookieJar};
 use rand::Rng;
@@ -342,8 +342,11 @@ pub fn render_verify_page(base_url: &str) -> String {
     )
 }
 
-pub async fn verify_page(State(state): State<Arc<AppState>>) -> Html<String> {
-    Html(state.verify_html.clone())
+pub async fn verify_page(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    (
+        [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
+        state.verify_html.clone(),
+    )
 }
 
 pub async fn login(State(state): State<Arc<AppState>>) -> Response {

@@ -79,10 +79,7 @@ pub async fn run(state: Arc<AppState>) {
              FROM player_cache pc \
              JOIN linked_accounts la ON la.uid = pc.uid \
              WHERE pc.next_fetch_at <= now() \
-             ORDER BY \
-               (CASE WHEN EXISTS(SELECT 1 FROM role_assignments ra WHERE ra.discord_id = la.discord_id) THEN 0 ELSE 1 END) ASC, \
-               pc.fetch_failures ASC, \
-               pc.next_fetch_at ASC \
+             ORDER BY is_active DESC, pc.fetch_failures ASC, pc.next_fetch_at ASC \
              LIMIT 1",
         )
         .fetch_optional(&state.pool)
