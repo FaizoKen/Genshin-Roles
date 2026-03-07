@@ -18,12 +18,13 @@ mod tasks;
 
 use services::enka::EnkaClient;
 use services::rolelogic::RoleLogicClient;
-use services::sync::SyncEvent;
+use services::sync::{ConfigSyncEvent, PlayerSyncEvent};
 
 pub struct AppState {
     pub pool: PgPool,
     pub config: config::AppConfig,
-    pub sync_tx: mpsc::Sender<SyncEvent>,
+    pub player_sync_tx: mpsc::Sender<PlayerSyncEvent>,
+    pub config_sync_tx: mpsc::Sender<ConfigSyncEvent>,
     pub enka_client: EnkaClient,
     pub rl_client: RoleLogicClient,
     pub oauth_http: reqwest::Client,
@@ -48,7 +49,8 @@ async fn main() {
     db::run_migrations(&pool).await;
     tracing::info!("Database connected and migrations applied");
 
-    let (sync_tx, sync_rx) = mpsc::channel::<SyncEvent>(256);
+    let (player_sync_tx, player_sync_rx) = mpsc::channel::<PlayerSyncEvent>(512);
+    let (config_sync_tx, config_sync_rx) = mpsc::channel::<ConfigSyncEvent>(64);
 
     let enka_client = EnkaClient::new(&app_config.enka_user_agent);
     let rl_client = RoleLogicClient::new();
@@ -61,7 +63,8 @@ async fn main() {
     let state = Arc::new(AppState {
         pool,
         config: app_config,
-        sync_tx,
+        player_sync_tx,
+        config_sync_tx,
         enka_client,
         rl_client,
         oauth_http,
@@ -69,7 +72,9 @@ async fn main() {
     });
 
     tokio::spawn(tasks::refresh_worker::run(Arc::clone(&state)));
-    tokio::spawn(tasks::sync_worker::run(sync_rx, Arc::clone(&state)));
+    tokio::spawn(tasks::player_sync_worker::run(player_sync_rx, Arc::clone(&state)));
+    tokio::spawn(tasks::config_sync_worker::run(config_sync_rx, Arc::clone(&state)));
+    tokio::spawn(tasks::guild_refresh_worker::run(Arc::clone(&state)));
     tokio::spawn(tasks::cleanup_expired(Arc::clone(&state)));
 
     let app = Router::new()

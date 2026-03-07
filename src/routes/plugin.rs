@@ -9,7 +9,7 @@ use serde_json::Value;
 
 use crate::error::AppError;
 use crate::schema;
-use crate::services::sync::SyncEvent;
+use crate::services::sync::ConfigSyncEvent;
 use crate::AppState;
 
 fn extract_token(headers: &HeaderMap) -> Result<String, AppError> {
@@ -122,7 +122,7 @@ pub async fn post_config(
     );
 
     // Trigger re-evaluation for this role link
-    let _ = state.sync_tx.send(SyncEvent::ConfigChanged {
+    let _ = state.config_sync_tx.send(ConfigSyncEvent {
         guild_id: body.guild_id,
         role_id: body.role_id,
     }).await;
