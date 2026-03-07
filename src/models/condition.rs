@@ -6,8 +6,7 @@ pub enum ConditionField {
     Level,
     WorldLevel,
     FinishAchievementNum,
-    TowerFloorIndex,
-    TowerLevelIndex,
+    SpiralAbyss,
     FetterCount,
     Region,
     HasAvatar,
@@ -16,7 +15,7 @@ pub enum ConditionField {
 
 impl ConditionField {
     pub fn is_numeric(&self) -> bool {
-        !matches!(self, Self::Region | Self::HasAvatar | Self::HasNameCard)
+        !matches!(self, Self::Region | Self::HasAvatar | Self::HasNameCard | Self::SpiralAbyss)
     }
 
     pub fn json_key(&self) -> &'static str {
@@ -24,8 +23,7 @@ impl ConditionField {
             Self::Level => "level",
             Self::WorldLevel => "worldLevel",
             Self::FinishAchievementNum => "finishAchievementNum",
-            Self::TowerFloorIndex => "towerFloorIndex",
-            Self::TowerLevelIndex => "towerLevelIndex",
+            Self::SpiralAbyss => "spiralAbyss",
             Self::FetterCount => "fetterCount",
             Self::Region => "region",
             Self::HasAvatar => "hasAvatar",
@@ -40,8 +38,7 @@ impl ConditionField {
             Self::Level => Some("pc.level"),
             Self::WorldLevel => Some("pc.world_level"),
             Self::FinishAchievementNum => Some("pc.achievements"),
-            Self::TowerFloorIndex => Some("pc.tower_floor"),
-            Self::TowerLevelIndex => Some("pc.tower_level"),
+            Self::SpiralAbyss => Some("pc.abyss_progress"),
             Self::FetterCount => Some("pc.fetter_count"),
             Self::Region => Some("pc.region"),
             Self::HasAvatar | Self::HasNameCard => None,
@@ -53,8 +50,7 @@ impl ConditionField {
             "level" => Some(Self::Level),
             "worldLevel" => Some(Self::WorldLevel),
             "finishAchievementNum" => Some(Self::FinishAchievementNum),
-            "towerFloorIndex" => Some(Self::TowerFloorIndex),
-            "towerLevelIndex" => Some(Self::TowerLevelIndex),
+            "spiralAbyss" => Some(Self::SpiralAbyss),
             "fetterCount" => Some(Self::FetterCount),
             "region" => Some(Self::Region),
             "hasAvatar" => Some(Self::HasAvatar),

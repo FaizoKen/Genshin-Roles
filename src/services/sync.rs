@@ -5,7 +5,7 @@ use sqlx::PgPool;
 
 use crate::error::AppError;
 use crate::models::condition::{Condition, ConditionField};
-use crate::services::condition_eval::evaluate_conditions;
+use crate::services::condition_eval::{evaluate_conditions, last_abyss_reset_utc};
 use crate::services::rolelogic::RoleLogicClient;
 
 /// Events sent to the player sync worker (lightweight, per-user).
@@ -32,8 +32,8 @@ pub async fn sync_for_player(
     rl_client: &RoleLogicClient,
 ) -> Result<(), AppError> {
     // Get player's cached data
-    let cache = sqlx::query_as::<_, (serde_json::Value, Option<String>)>(
-        "SELECT pc.player_info, pc.region FROM player_cache pc \
+    let cache = sqlx::query_as::<_, (serde_json::Value, Option<String>, chrono::DateTime<chrono::Utc>)>(
+        "SELECT pc.player_info, pc.region, pc.fetched_at FROM player_cache pc \
          JOIN linked_accounts la ON la.uid = pc.uid \
          WHERE la.discord_id = $1",
     )
@@ -41,7 +41,7 @@ pub async fn sync_for_player(
     .fetch_optional(pool)
     .await?;
 
-    let Some((player_info, region)) = cache else {
+    let Some((player_info, region, fetched_at)) = cache else {
         return Ok(());
     };
 
@@ -74,7 +74,7 @@ pub async fn sync_for_player(
 
     let mut actions: Vec<Action> = Vec::new();
     for (guild_id, role_id, api_token, conditions) in &role_links {
-        let qualifies = evaluate_conditions(conditions, &player_info, region.as_deref());
+        let qualifies = evaluate_conditions(conditions, &player_info, region.as_deref(), Some(fetched_at));
         let currently_assigned = existing.contains(&(guild_id.clone(), role_id.clone()));
         match (qualifies, currently_assigned) {
             (true, false) => actions.push(Action::Add {
@@ -195,8 +195,31 @@ fn build_condition_where(conditions: &[Condition]) -> (String, Vec<ConditionBind
                 ));
                 binds.push(ConditionBind::Int(id));
             }
+            ConditionField::SpiralAbyss => {
+                let op = condition.operator.sql_operator();
+                let val = condition.value.as_i64().unwrap_or(0);
+                let idx = binds.len() + 1;
+                clauses.push(format!("pc.abyss_progress {op} ${idx}"));
+                binds.push(ConditionBind::Int(val));
+                // Freshness gate: compute per-region reset timestamps
+                let na_reset = last_abyss_reset_utc("NA");
+                let eu_reset = last_abyss_reset_utc("EU");
+                let asia_reset = last_abyss_reset_utc("ASIA");
+                let idx_na = binds.len() + 1;
+                let idx_eu = binds.len() + 2;
+                let idx_asia = binds.len() + 3;
+                clauses.push(format!(
+                    "pc.fetched_at >= CASE \
+                     WHEN UPPER(pc.region) = 'NA' THEN ${idx_na} \
+                     WHEN UPPER(pc.region) = 'EU' THEN ${idx_eu} \
+                     ELSE ${idx_asia} END"
+                ));
+                binds.push(ConditionBind::Timestamp(na_reset));
+                binds.push(ConditionBind::Timestamp(eu_reset));
+                binds.push(ConditionBind::Timestamp(asia_reset));
+            }
             numeric_field => {
-                let col = numeric_field.sql_column().unwrap(); // safe: Region handled above
+                let col = numeric_field.sql_column().unwrap(); // safe: Region, SpiralAbyss handled above
                 let op = condition.operator.sql_operator();
                 let val = condition.value.as_i64().unwrap_or(0);
                 let idx = binds.len() + 1;
@@ -213,6 +236,7 @@ fn build_condition_where(conditions: &[Condition]) -> (String, Vec<ConditionBind
 enum ConditionBind {
     Int(i64),
     Text(String),
+    Timestamp(chrono::DateTime<chrono::Utc>),
 }
 
 /// Re-evaluate all users for a specific role link (after config change).
@@ -328,6 +352,7 @@ async fn exec_condition_query(
         q = match bind {
             ConditionBind::Int(v) => q.bind(*v),
             ConditionBind::Text(v) => q.bind(v),
+            ConditionBind::Timestamp(v) => q.bind(*v),
         };
     }
     q = q.bind(guild_id);
@@ -348,6 +373,7 @@ async fn exec_condition_count(
         q = match bind {
             ConditionBind::Int(v) => q.bind(*v),
             ConditionBind::Text(v) => q.bind(v),
+            ConditionBind::Timestamp(v) => q.bind(*v),
         };
     }
     q = q.bind(guild_id);
