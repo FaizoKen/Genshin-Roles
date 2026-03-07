@@ -86,7 +86,8 @@ async fn main() {
         .route("/verify/start", post(routes::verification::start))
         .route("/verify/check", post(routes::verification::check))
         .route("/verify/unlink", post(routes::verification::unlink))
-        // Health
+        // Health & static
+        .route("/favicon.ico", get(routes::health::favicon))
         .route("/health", get(routes::health::health))
         .layer(TraceLayer::new_for_http())
         .layer(CorsLayer::permissive())
