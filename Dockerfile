@@ -1,4 +1,4 @@
-FROM rust:1.77-bookworm AS builder
+FROM rust:1.88-bookworm AS builder
 WORKDIR /app
 
 # Cache dependencies in a separate layer
