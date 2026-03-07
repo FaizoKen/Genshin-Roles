@@ -47,12 +47,22 @@ pub fn render_verify_page(base_url: &str) -> String {
     let login_url = format!("{base_url}/verify/login");
 
     format!(
-        r#"<!DOCTYPE html>
+        r##"<!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Genshin Roles - Link Account</title>
+    <link rel="icon" href="{base_url}/favicon.ico" type="image/x-icon">
+    <meta name="description" content="Link your Discord account with your Genshin Impact UID to automatically receive server roles based on your in-game progress.">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Genshin Roles - Link Account">
+    <meta property="og:description" content="Link your Discord account with your Genshin Impact UID to automatically receive server roles based on your in-game progress.">
+    <meta property="og:url" content="{base_url}/verify">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Genshin Roles - Link Account">
+    <meta name="twitter:description" content="Link your Discord account with your Genshin Impact UID to automatically receive server roles based on your in-game progress.">
+    <meta name="theme-color" content="#e8b44a">
     <style>
         * {{ box-sizing: border-box; margin: 0; padding: 0; }}
         body {{ font-family: system-ui, -apple-system, sans-serif; max-width: 580px; margin: 0 auto; padding: 32px 20px; background: #0e1525; color: #c8ccd4; min-height: 100vh; }}
@@ -163,12 +173,13 @@ pub fn render_verify_page(base_url: &str) -> String {
         <div class="code-box">
             <span class="code" id="verify-code"></span>
         </div>
-        <p style="font-size:13px; color:#64748b;">Verifying UID: <span id="verify-uid" style="color:#74b9ff;"></span></p>
+        <p style="font-size:13px; color:#64748b;">Verifying: <span id="verify-uid" style="color:#74b9ff;"></span></p>
         <ol class="steps">
             <li>Open <strong>Genshin Impact</strong></li>
             <li>Go to <strong>Paimon Menu</strong> and tap your avatar (top-left)</li>
-            <li>Tap the pencil icon next to <strong>Signature</strong></li>
+            <li>Tap the pencil icon next to your name and edit <strong>Signature</strong></li>
             <li>Paste or type the code above, then <strong>save</strong></li>
+            <li>Click <strong>logout</strong> (optional but recommended for a quick refresh)</li>
             <li>Come back here and click <strong>Verify Now</strong></li>
         </ol>
         <p class="note">You can remove the code from your signature right after verification.</p>
@@ -225,7 +236,9 @@ pub fn render_verify_page(base_url: &str) -> String {
                 showSection('linked-section');
             }} else if (s.pending_verification) {{
                 document.getElementById('verify-code').textContent = s.pending_verification.code;
-                document.getElementById('verify-uid').textContent = s.pending_verification.uid;
+                document.getElementById('verify-uid').textContent = s.pending_verification.nickname
+                    ? s.pending_verification.nickname + ' (AR ' + (s.pending_verification.level || '?') + ') - ' + s.pending_verification.uid
+                    : s.pending_verification.uid;
                 document.getElementById('uid-discord').textContent = s.display_name;
                 showSection('verify-section');
             }} else {{
@@ -245,7 +258,9 @@ pub fn render_verify_page(base_url: &str) -> String {
         try {{
             const res = await api('POST', '/verify/start', {{ uid }});
             document.getElementById('verify-code').textContent = res.code;
-            document.getElementById('verify-uid').textContent = res.uid;
+            document.getElementById('verify-uid').textContent = res.nickname
+                ? res.nickname + ' (AR ' + (res.level || '?') + ') - ' + res.uid
+                : res.uid;
             showSection('verify-section');
         }} catch (e) {{ showMsg(e.message, 'error'); }}
     }}
@@ -320,7 +335,7 @@ pub fn render_verify_page(base_url: &str) -> String {
     init();
     </script>
 </body>
-</html>"#
+</html>"##
     )
 }
 
@@ -430,11 +445,29 @@ pub async fn status(
     .fetch_optional(&state.pool)
     .await?;
 
+    let mut pending_info = pending.as_ref().map(|(uid, code)| json!({"uid": uid, "code": code}));
+
+    // If pending, try to get player info from cache for display
+    if let Some((uid, _)) = &pending {
+        if let Ok(Some((player_info,))) = sqlx::query_as::<_, (Value,)>(
+            "SELECT player_info FROM player_cache WHERE uid = $1",
+        )
+        .bind(uid)
+        .fetch_optional(&state.pool)
+        .await
+        {
+            if let Some(ref mut info) = pending_info {
+                info["nickname"] = json!(player_info.get("nickname").and_then(|v| v.as_str()));
+                info["level"] = json!(player_info.get("level").and_then(|v| v.as_i64()));
+            }
+        }
+    }
+
     Ok(Json(json!({
         "discord_id": discord_id,
         "display_name": display_name,
         "linked": account.as_ref().map(|a| &a.0),
-        "pending_verification": pending.as_ref().map(|(uid, code)| json!({"uid": uid, "code": code})),
+        "pending_verification": pending_info,
     })))
 }
 
@@ -498,9 +531,38 @@ pub async fn start(
     .execute(&state.pool)
     .await?;
 
+    // Try to fetch player info for display
+    let (nickname, level) = match state.enka_client.fetch_player_info(&body.uid).await {
+        Ok(enka_result) => {
+            let ttl = enka_result.ttl.max(60);
+            let next_fetch = chrono::Utc::now() + chrono::Duration::seconds(ttl as i64);
+            let _ = sqlx::query(
+                "INSERT INTO player_cache (uid, player_info, region, enka_ttl, next_fetch_at) \
+                 VALUES ($1, $2, $3, $4, $5) \
+                 ON CONFLICT (uid) DO UPDATE SET \
+                 player_info = $2, region = $3, enka_ttl = $4, \
+                 fetched_at = now(), next_fetch_at = $5, fetch_failures = 0",
+            )
+            .bind(&body.uid)
+            .bind(&enka_result.player_info)
+            .bind(&enka_result.region)
+            .bind(ttl)
+            .bind(next_fetch)
+            .execute(&state.pool)
+            .await;
+
+            let nickname = enka_result.player_info.get("nickname").and_then(|v| v.as_str()).map(String::from);
+            let level = enka_result.player_info.get("level").and_then(|v| v.as_i64());
+            (nickname, level)
+        }
+        Err(_) => (None, None),
+    };
+
     Ok(Json(json!({
         "code": code,
         "uid": body.uid,
+        "nickname": nickname,
+        "level": level,
         "instructions": format!(
             "Set your in-game signature to include: {}  Then click Verify. The code expires in 15 minutes.",
             code
