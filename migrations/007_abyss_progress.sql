@@ -2,7 +2,11 @@
 -- Value = floor * 10 + chamber (e.g. floor 12 chamber 3 = 123).
 ALTER TABLE player_cache ADD COLUMN IF NOT EXISTS abyss_progress INTEGER NOT NULL DEFAULT 0;
 
-UPDATE player_cache SET abyss_progress = tower_floor * 10 + tower_level;
+-- Backfill from player_info JSONB (idempotent, works after columns are dropped)
+UPDATE player_cache SET
+    abyss_progress = COALESCE((player_info->>'towerFloorIndex')::int, 0) * 10
+                   + COALESCE((player_info->>'towerLevelIndex')::int, 0)
+WHERE abyss_progress = 0 AND player_info != '{}'::jsonb;
 
 ALTER TABLE player_cache DROP COLUMN IF EXISTS tower_floor;
 ALTER TABLE player_cache DROP COLUMN IF EXISTS tower_level;

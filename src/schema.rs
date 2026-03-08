@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use crate::error::AppError;
 use crate::models::condition::{Condition, ConditionField, ConditionOperator};
 
-pub fn build_config_schema(conditions: &[Condition], verify_url: &str) -> Value {
+pub fn build_config_schema(conditions: &[Condition], verify_url: &str, players_url: &str) -> Value {
     let c = conditions.first();
 
     let mut values = HashMap::new();
@@ -45,7 +45,9 @@ pub fn build_config_schema(conditions: &[Condition], verify_url: &str) -> Value 
                             "1. Members link their Genshin account at: {verify_url}\n\
                              2. Set a condition below (e.g. Adventure Rank >= 50)\n\
                              3. Members who meet the condition automatically receive this role\n\
-                             4. Player data is refreshed periodically to keep roles up to date"
+                             4. Player data is refreshed periodically to keep roles up to date\n\
+                             \n\
+                             View all verified players: {players_url}"
                         )
                     }
                 ]

@@ -22,6 +22,7 @@ struct DiscordUser {
 #[derive(serde::Deserialize)]
 struct DiscordGuild {
     id: String,
+    name: String,
 }
 
 pub struct DiscordOAuth {
@@ -116,8 +117,8 @@ impl DiscordOAuth {
         Ok((user.id, display_name))
     }
 
-    /// Returns list of guild IDs the user belongs to.
-    pub async fn get_user_guilds(&self, access_token: &str) -> Result<Vec<String>, AppError> {
+    /// Returns list of (guild_id, guild_name) the user belongs to.
+    pub async fn get_user_guilds(&self, access_token: &str) -> Result<Vec<(String, String)>, AppError> {
         let guilds: Vec<DiscordGuild> = self
             .http
             .get("https://discord.com/api/v10/users/@me/guilds")
@@ -129,7 +130,7 @@ impl DiscordOAuth {
             .await
             .map_err(|e| AppError::Internal(format!("Discord guilds parse failed: {e}")))?;
 
-        Ok(guilds.into_iter().map(|g| g.id).collect())
+        Ok(guilds.into_iter().map(|g| (g.id, g.name)).collect())
     }
 }
 
