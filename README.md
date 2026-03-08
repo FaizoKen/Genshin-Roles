@@ -1,4 +1,4 @@
-# Genshin Player Role
+# Genshin Role
 
 A [RoleLogic](https://rolelogic.faizo.net) plugin that links Discord accounts with Genshin Impact player data via [Enka.Network](https://enka.network). Users verify UID ownership by placing a code in their in-game signature, then roles are automatically assigned based on player progress (AR level, Spiral Abyss, achievements, etc.).
 
