@@ -1,0 +1,1 @@
+ALTER TABLE user_guilds ADD COLUMN IF NOT EXISTS guild_name TEXT;

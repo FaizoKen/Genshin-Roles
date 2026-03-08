@@ -6,8 +6,8 @@
       "server": "localhost",
       "port": 5432,
       "driver": "PostgreSQL",
-      "name": "genshin_player_role",
-      "database": "genshin_player_role",
+      "name": "genshin_roles",
+      "database": "genshin_roles",
       "username": "postgres",
       "password": "root"
     }

@@ -29,6 +29,7 @@ pub struct AppState {
     pub rl_client: RoleLogicClient,
     pub oauth_http: reqwest::Client,
     pub verify_html: bytes::Bytes,
+    pub players_html: bytes::Bytes,
 }
 
 #[tokio::main]
@@ -59,6 +60,7 @@ async fn main() {
         .build()
         .expect("Failed to build OAuth HTTP client");
     let verify_html = bytes::Bytes::from(routes::verification::render_verify_page(&app_config.base_url));
+    let players_html = bytes::Bytes::from(routes::players::render_players_page(&app_config.base_url));
 
     let state = Arc::new(AppState {
         pool,
@@ -69,6 +71,7 @@ async fn main() {
         rl_client,
         oauth_http,
         verify_html,
+        players_html,
     });
 
     tokio::spawn(tasks::refresh_worker::run(Arc::clone(&state)));
@@ -91,6 +94,9 @@ async fn main() {
         .route("/verify/start", post(routes::verification::start))
         .route("/verify/check", post(routes::verification::check))
         .route("/verify/unlink", post(routes::verification::unlink))
+        // Player list (public)
+        .route("/players/{guild_id}", get(routes::players::players_page))
+        .route("/players/{guild_id}/data", get(routes::players::players_data))
         // Health & static
         .route("/favicon.ico", get(routes::health::favicon))
         .route("/health", get(routes::health::health))

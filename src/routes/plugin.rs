@@ -60,8 +60,8 @@ pub async fn get_config(
 ) -> Result<Json<Value>, AppError> {
     let token = extract_token(&headers)?;
 
-    let link = sqlx::query_as::<_, (sqlx::types::Json<Vec<crate::models::condition::Condition>>,)>(
-        "SELECT conditions FROM role_links WHERE api_token = $1",
+    let link = sqlx::query_as::<_, (String, sqlx::types::Json<Vec<crate::models::condition::Condition>>)>(
+        "SELECT guild_id, conditions FROM role_links WHERE api_token = $1",
     )
     .bind(&token)
     .fetch_optional(&state.pool)
@@ -69,7 +69,8 @@ pub async fn get_config(
     .ok_or(AppError::Unauthorized)?;
 
     let verify_url = format!("{}/verify", state.config.base_url);
-    let schema = schema::build_config_schema(&link.0, &verify_url);
+    let players_url = format!("{}/players/{}", state.config.base_url, link.0);
+    let schema = schema::build_config_schema(&link.1, &verify_url, &players_url);
 
     Ok(Json(schema))
 }

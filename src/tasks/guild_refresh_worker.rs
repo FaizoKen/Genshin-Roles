@@ -105,7 +105,7 @@ async fn refresh_user_guilds(
         .await?;
 
     // Fetch guild list
-    let guild_ids = oauth.get_user_guilds(&access_token).await?;
+    let guilds = oauth.get_user_guilds(&access_token).await?;
 
     // Replace guild memberships atomically
     let mut tx = state.pool.begin().await?;
@@ -114,13 +114,16 @@ async fn refresh_user_guilds(
         .execute(&mut *tx)
         .await?;
 
-    if !guild_ids.is_empty() {
+    if !guilds.is_empty() {
+        let guild_ids: Vec<&str> = guilds.iter().map(|(id, _)| id.as_str()).collect();
+        let guild_names: Vec<&str> = guilds.iter().map(|(_, name)| name.as_str()).collect();
         sqlx::query(
-            "INSERT INTO user_guilds (discord_id, guild_id, updated_at) \
-             SELECT $1, UNNEST($2::text[]), now()",
+            "INSERT INTO user_guilds (discord_id, guild_id, guild_name, updated_at) \
+             SELECT $1, UNNEST($2::text[]), UNNEST($3::text[]), now()",
         )
         .bind(discord_id)
         .bind(&guild_ids)
+        .bind(&guild_names)
         .execute(&mut *tx)
         .await?;
     }
@@ -135,6 +138,6 @@ async fn refresh_user_guilds(
 
     tx.commit().await?;
 
-    tracing::debug!(discord_id, guilds = guild_ids.len(), "Guild list refreshed");
+    tracing::debug!(discord_id, guilds = guilds.len(), "Guild list refreshed");
     Ok(())
 }

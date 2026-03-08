@@ -433,18 +433,21 @@ pub async fn callback(
 
     // Fetch and store guild memberships (best-effort, don't block login on failure)
     match oauth.get_user_guilds(&access_token).await {
-        Ok(guild_ids) if !guild_ids.is_empty() => {
+        Ok(guilds) if !guilds.is_empty() => {
+            let guild_ids: Vec<&str> = guilds.iter().map(|(id, _)| id.as_str()).collect();
+            let guild_names: Vec<&str> = guilds.iter().map(|(_, name)| name.as_str()).collect();
             let mut tx = state.pool.begin().await?;
             sqlx::query("DELETE FROM user_guilds WHERE discord_id = $1")
                 .bind(&discord_id)
                 .execute(&mut *tx)
                 .await?;
             sqlx::query(
-                "INSERT INTO user_guilds (discord_id, guild_id, updated_at) \
-                 SELECT $1, UNNEST($2::text[]), now()",
+                "INSERT INTO user_guilds (discord_id, guild_id, guild_name, updated_at) \
+                 SELECT $1, UNNEST($2::text[]), UNNEST($3::text[]), now()",
             )
             .bind(&discord_id)
             .bind(&guild_ids)
+            .bind(&guild_names)
             .execute(&mut *tx)
             .await?;
             tx.commit().await?;
@@ -635,7 +638,7 @@ pub async fn check(
     State(state): State<Arc<AppState>>,
     jar: CookieJar,
 ) -> Result<Json<Value>, AppError> {
-    let (discord_id, _) = get_session(&jar, &state.config.session_secret)?;
+    let (discord_id, display_name) = get_session(&jar, &state.config.session_secret)?;
 
     let session = sqlx::query_as::<_, (i64, String, String, i32)>(
         "SELECT id, uid, code, attempts FROM verification_sessions \
@@ -686,11 +689,12 @@ pub async fn check(
 
     // Verification succeeded - link account
     sqlx::query(
-        "INSERT INTO linked_accounts (discord_id, uid) VALUES ($1, $2) \
-         ON CONFLICT (discord_id) DO UPDATE SET uid = $2, linked_at = now()",
+        "INSERT INTO linked_accounts (discord_id, uid, discord_name) VALUES ($1, $2, $3) \
+         ON CONFLICT (discord_id) DO UPDATE SET uid = $2, linked_at = now(), discord_name = $3",
     )
     .bind(&discord_id)
     .bind(&uid)
+    .bind(&display_name)
     .execute(&state.pool)
     .await?;
 
