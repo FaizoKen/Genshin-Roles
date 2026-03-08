@@ -49,5 +49,57 @@ services:
         limits:
           memory: 256M
 
+  db-backup:
+    image: postgres:16-alpine
+    restart: always
+    depends_on:
+      - db
+    volumes:
+      - ./backups:/backups
+      - /tmp:/var/lib/postgresql/data
+    environment:
+      PGPASSWORD: password
+    entrypoint: |
+      bash -c '
+      while true; do
+        echo "[$(date)] Running database backup..."
+        pg_dump -h db -U gr genshin_roles | gzip > /backups/genshin_roles-$(date +%F_%H-%M-%S).sql.gz
+        echo "[$(date)] Backup complete."
+        find /backups -type f -mtime +7 -delete
+        sleep 24h
+      done
+      '
+
+  backup-sync:
+    image: instrumentisto/rsync-ssh:latest
+    restart: always
+    depends_on:
+      - db-backup
+    volumes:
+      - ./backups:/backups:ro
+    environment:
+      VPS_HOST: ${VPS_HOST}
+      VPS_USER: ${VPS_USER}
+      VPS_PASS: ${VPS_PASS}
+      VPS_BACKUP_DIR: ${VPS_BACKUP_DIR:-/root/genshin-roles-backups}
+    entrypoint: |
+      sh -c '
+      apk add --no-cache sshpass
+      while true; do
+        echo "[$(date)] Starting backup sync to VPS..."
+        sshpass -p "$$VPS_PASS" ssh -o StrictHostKeyChecking=no "$$VPS_USER@$$VPS_HOST" "mkdir -p $$VPS_BACKUP_DIR"
+        sshpass -p "$$VPS_PASS" rsync -avz \
+          -e "ssh -o StrictHostKeyChecking=no" \
+          /backups/ \
+          "$$VPS_USER@$$VPS_HOST:$$VPS_BACKUP_DIR/"
+        if [ $$? -eq 0 ]; then
+          echo "[$(date)] Backup sync completed successfully."
+        else
+          echo "[$(date)] Backup sync failed!"
+        fi
+        sleep 6h
+      done
+      '
+
 volumes:
   pgdata:
