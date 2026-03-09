@@ -131,7 +131,7 @@ pub fn build_config_schema(conditions: &[Condition], verify_url: &str, players_u
                         "type": "text",
                         "key": "value_spiralAbyss",
                         "label": "Floor-Chamber",
-                        "description": "Floor (1–12) and chamber (1–3) separated by dash, e.g. 12-3. Info: https://genshin-impact.fandom.com/wiki/Spiral_Abyss",
+                        "description": "Floor (1–12) and chamber (1–3) separated by dash, e.g. 12-3.",
                         "required": true,
                         "pattern": "^\\d{1,2}-[1-3]$",
                         "pattern_message": "Use floor-chamber format, e.g. 12-3",
@@ -164,7 +164,7 @@ pub fn build_config_schema(conditions: &[Condition], verify_url: &str, players_u
                         "type": "number",
                         "key": "value_hasAvatar",
                         "label": "Avatar ID",
-                        "description": "Character ID from Enka profile showcase. Find IDs at https://enka.network",
+                        "description": "Go to https://gi.yatta.moe/en/archive/avatar , pick a character, and copy the ID from avatar/:id in the URL.",
                         "required": true,
                         "min": 1,
                         "condition": { "field": "field", "equals": "hasAvatar" }
@@ -173,7 +173,7 @@ pub fn build_config_schema(conditions: &[Condition], verify_url: &str, players_u
                         "type": "number",
                         "key": "value_hasNameCard",
                         "label": "Namecard ID",
-                        "description": "Namecard ID from Enka profile showcase. Find IDs at https://enka.network",
+                        "description": "Go to https://gi.yatta.moe/en/archive/namecard , pick a namecard, and copy the ID from namecard/:id in the URL.",
                         "required": true,
                         "min": 1,
                         "condition": { "field": "field", "equals": "hasNameCard" }
