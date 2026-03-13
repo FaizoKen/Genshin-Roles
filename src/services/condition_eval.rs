@@ -31,8 +31,22 @@ fn evaluate_single(
             player_info["showAvatarInfoList"]
                 .as_array()
                 .is_some_and(|list| {
-                    list.iter()
-                        .any(|a| a["avatarId"].as_i64() == Some(target_id))
+                    list.iter().any(|a| {
+                        if a["avatarId"].as_i64() != Some(target_id) {
+                            return false;
+                        }
+                        if let Some(min_level) = condition.avatar_level {
+                            if a["level"].as_i64().unwrap_or(0) < min_level {
+                                return false;
+                            }
+                        }
+                        if let Some(min_const) = condition.avatar_constellation {
+                            if a["talentLevel"].as_i64().unwrap_or(0) < min_const {
+                                return false;
+                            }
+                        }
+                        true
+                    })
                 })
         }
         ConditionField::HasNameCard => {
@@ -178,8 +192,8 @@ mod tests {
             "towerStarIndex": 36,
             "fetterCount": 13,
             "showAvatarInfoList": [
-                {"avatarId": 10000021, "level": 90},
-                {"avatarId": 10000032, "level": 90}
+                {"avatarId": 10000021, "level": 90, "talentLevel": 2},
+                {"avatarId": 10000032, "level": 80}
             ],
             "showNameCardIdList": [210051, 210087, 210018]
         })
@@ -192,6 +206,8 @@ mod tests {
             operator: ConditionOperator::Gte,
             value: json!(50),
             value_end: None,
+            avatar_level: None,
+            avatar_constellation: None,
         }];
         assert!(evaluate_conditions(&conditions, &sample_player_info(), Some("NA"), None));
     }
@@ -203,6 +219,8 @@ mod tests {
             operator: ConditionOperator::Gte,
             value: json!(60),
             value_end: None,
+            avatar_level: None,
+            avatar_constellation: None,
         }];
         assert!(!evaluate_conditions(&conditions, &sample_player_info(), Some("NA"), None));
     }
@@ -214,6 +232,8 @@ mod tests {
             operator: ConditionOperator::Eq,
             value: json!("NA"),
             value_end: None,
+            avatar_level: None,
+            avatar_constellation: None,
         }];
         assert!(evaluate_conditions(&conditions, &sample_player_info(), Some("NA"), None));
         assert!(!evaluate_conditions(&conditions, &sample_player_info(), Some("EU"), None));
@@ -226,6 +246,8 @@ mod tests {
             operator: ConditionOperator::Eq,
             value: json!(10000021),
             value_end: None,
+            avatar_level: None,
+            avatar_constellation: None,
         }];
         assert!(evaluate_conditions(&conditions, &sample_player_info(), None, None));
     }
@@ -237,6 +259,8 @@ mod tests {
             operator: ConditionOperator::Eq,
             value: json!(99999999),
             value_end: None,
+            avatar_level: None,
+            avatar_constellation: None,
         }];
         assert!(!evaluate_conditions(&conditions, &sample_player_info(), None, None));
     }
@@ -248,6 +272,8 @@ mod tests {
             operator: ConditionOperator::Eq,
             value: json!(210051),
             value_end: None,
+            avatar_level: None,
+            avatar_constellation: None,
         }];
         assert!(evaluate_conditions(&conditions, &sample_player_info(), None, None));
     }
@@ -260,18 +286,24 @@ mod tests {
                 operator: ConditionOperator::Gte,
                 value: json!(50),
                 value_end: None,
+                avatar_level: None,
+                avatar_constellation: None,
             },
             Condition {
                 field: ConditionField::WorldLevel,
                 operator: ConditionOperator::Eq,
                 value: json!(8),
                 value_end: None,
+                avatar_level: None,
+                avatar_constellation: None,
             },
             Condition {
                 field: ConditionField::Region,
                 operator: ConditionOperator::Eq,
                 value: json!("NA"),
                 value_end: None,
+                avatar_level: None,
+                avatar_constellation: None,
             },
         ];
         assert!(evaluate_conditions(&conditions, &sample_player_info(), Some("NA"), None));
@@ -285,12 +317,16 @@ mod tests {
                 operator: ConditionOperator::Gte,
                 value: json!(50),
                 value_end: None,
+                avatar_level: None,
+                avatar_constellation: None,
             },
             Condition {
                 field: ConditionField::Region,
                 operator: ConditionOperator::Eq,
                 value: json!("EU"),
                 value_end: None,
+                avatar_level: None,
+                avatar_constellation: None,
             },
         ];
         assert!(!evaluate_conditions(&conditions, &sample_player_info(), Some("NA"), None));
@@ -304,6 +340,8 @@ mod tests {
             operator: ConditionOperator::Gte,
             value: json!(121), // 12-1
             value_end: None,
+            avatar_level: None,
+            avatar_constellation: None,
         }];
         // No fetched_at → freshness check skipped
         assert!(evaluate_conditions(&conditions, &sample_player_info(), Some("NA"), None));
@@ -316,6 +354,8 @@ mod tests {
             operator: ConditionOperator::Eq,
             value: json!(123), // 12-3
             value_end: None,
+            avatar_level: None,
+            avatar_constellation: None,
         }];
         assert!(evaluate_conditions(&conditions, &sample_player_info(), Some("NA"), None));
     }
@@ -327,6 +367,8 @@ mod tests {
             operator: ConditionOperator::Gte,
             value: json!(124), // higher than 12-3
             value_end: None,
+            avatar_level: None,
+            avatar_constellation: None,
         }];
         assert!(!evaluate_conditions(&conditions, &sample_player_info(), Some("NA"), None));
     }
@@ -338,6 +380,8 @@ mod tests {
             operator: ConditionOperator::Gte,
             value: json!(121),
             value_end: None,
+            avatar_level: None,
+            avatar_constellation: None,
         }];
         // fetched_at far in the past → stale → should fail
         let old_date = DateTime::parse_from_rfc3339("2020-01-01T00:00:00Z")
@@ -358,6 +402,8 @@ mod tests {
             operator: ConditionOperator::Gte,
             value: json!(121),
             value_end: None,
+            avatar_level: None,
+            avatar_constellation: None,
         }];
         // fetched_at = now → fresh
         let now = Utc::now();
@@ -376,6 +422,8 @@ mod tests {
             operator: ConditionOperator::Gte,
             value: json!(30),
             value_end: None,
+            avatar_level: None,
+            avatar_constellation: None,
         }];
         assert!(evaluate_conditions(&conditions, &sample_player_info(), Some("NA"), None));
     }
@@ -387,6 +435,8 @@ mod tests {
             operator: ConditionOperator::Gt,
             value: json!(36),
             value_end: None,
+            avatar_level: None,
+            avatar_constellation: None,
         }];
         assert!(!evaluate_conditions(&conditions, &sample_player_info(), Some("NA"), None));
     }
@@ -398,6 +448,8 @@ mod tests {
             operator: ConditionOperator::Gte,
             value: json!(30),
             value_end: None,
+            avatar_level: None,
+            avatar_constellation: None,
         }];
         let old_date = DateTime::parse_from_rfc3339("2020-01-01T00:00:00Z")
             .unwrap()
@@ -418,6 +470,8 @@ mod tests {
             operator: ConditionOperator::Gte,
             value: json!(1),
             value_end: None,
+            avatar_level: None,
+            avatar_constellation: None,
         }];
         assert!(!evaluate_conditions(&conditions, &player, None, None));
     }
@@ -430,6 +484,8 @@ mod tests {
             operator: ConditionOperator::Between,
             value: json!(50),
             value_end: Some(json!(60)),
+            avatar_level: None,
+            avatar_constellation: None,
         }];
         assert!(evaluate_conditions(&conditions, &sample_player_info(), Some("NA"), None));
     }
@@ -442,6 +498,8 @@ mod tests {
             operator: ConditionOperator::Between,
             value: json!(58),
             value_end: Some(json!(60)),
+            avatar_level: None,
+            avatar_constellation: None,
         }];
         assert!(!evaluate_conditions(&conditions, &sample_player_info(), Some("NA"), None));
     }
@@ -454,6 +512,8 @@ mod tests {
             operator: ConditionOperator::Between,
             value: json!(57),
             value_end: Some(json!(57)),
+            avatar_level: None,
+            avatar_constellation: None,
         }];
         assert!(evaluate_conditions(&conditions, &sample_player_info(), Some("NA"), None));
     }
@@ -466,6 +526,8 @@ mod tests {
             operator: ConditionOperator::Between,
             value: json!(121),
             value_end: Some(json!(123)),
+            avatar_level: None,
+            avatar_constellation: None,
         }];
         assert!(evaluate_conditions(&conditions, &sample_player_info(), Some("NA"), None));
     }
@@ -480,5 +542,103 @@ mod tests {
     fn test_last_abyss_reset_returns_past() {
         let reset = last_abyss_reset_utc("NA");
         assert!(reset <= Utc::now());
+    }
+
+    #[test]
+    fn test_has_avatar_with_level() {
+        // Avatar 10000021 has level 90 → level >= 90 should pass
+        let conditions = vec![Condition {
+            field: ConditionField::HasAvatar,
+            operator: ConditionOperator::Eq,
+            value: json!(10000021),
+            value_end: None,
+            avatar_level: Some(90),
+            avatar_constellation: None,
+        }];
+        assert!(evaluate_conditions(&conditions, &sample_player_info(), None, None));
+    }
+
+    #[test]
+    fn test_has_avatar_with_level_fail() {
+        // Avatar 10000032 has level 80 → level >= 90 should fail
+        let conditions = vec![Condition {
+            field: ConditionField::HasAvatar,
+            operator: ConditionOperator::Eq,
+            value: json!(10000032),
+            value_end: None,
+            avatar_level: Some(90),
+            avatar_constellation: None,
+        }];
+        assert!(!evaluate_conditions(&conditions, &sample_player_info(), None, None));
+    }
+
+    #[test]
+    fn test_has_avatar_with_constellation() {
+        // Avatar 10000021 has talentLevel 2 → constellation >= 2 should pass
+        let conditions = vec![Condition {
+            field: ConditionField::HasAvatar,
+            operator: ConditionOperator::Eq,
+            value: json!(10000021),
+            value_end: None,
+            avatar_level: None,
+            avatar_constellation: Some(2),
+        }];
+        assert!(evaluate_conditions(&conditions, &sample_player_info(), None, None));
+    }
+
+    #[test]
+    fn test_has_avatar_with_constellation_fail() {
+        // Avatar 10000021 has talentLevel 2 → constellation >= 3 should fail
+        let conditions = vec![Condition {
+            field: ConditionField::HasAvatar,
+            operator: ConditionOperator::Eq,
+            value: json!(10000021),
+            value_end: None,
+            avatar_level: None,
+            avatar_constellation: Some(3),
+        }];
+        assert!(!evaluate_conditions(&conditions, &sample_player_info(), None, None));
+    }
+
+    #[test]
+    fn test_has_avatar_with_level_and_constellation() {
+        // Avatar 10000021: level 90, talentLevel 2 → both pass
+        let conditions = vec![Condition {
+            field: ConditionField::HasAvatar,
+            operator: ConditionOperator::Eq,
+            value: json!(10000021),
+            value_end: None,
+            avatar_level: Some(90),
+            avatar_constellation: Some(2),
+        }];
+        assert!(evaluate_conditions(&conditions, &sample_player_info(), None, None));
+    }
+
+    #[test]
+    fn test_has_avatar_missing_constellation_defaults_zero() {
+        // Avatar 10000032 has no talentLevel → defaults to 0 → constellation >= 1 should fail
+        let conditions = vec![Condition {
+            field: ConditionField::HasAvatar,
+            operator: ConditionOperator::Eq,
+            value: json!(10000032),
+            value_end: None,
+            avatar_level: None,
+            avatar_constellation: Some(1),
+        }];
+        assert!(!evaluate_conditions(&conditions, &sample_player_info(), None, None));
+    }
+
+    #[test]
+    fn test_has_avatar_no_sub_filters() {
+        // Just avatar ID, no sub-filters — should work as before
+        let conditions = vec![Condition {
+            field: ConditionField::HasAvatar,
+            operator: ConditionOperator::Eq,
+            value: json!(10000032),
+            value_end: None,
+            avatar_level: None,
+            avatar_constellation: None,
+        }];
+        assert!(evaluate_conditions(&conditions, &sample_player_info(), None, None));
     }
 }

@@ -33,6 +33,16 @@ pub fn build_config_schema(conditions: &[Condition], verify_url: &str, players_u
         };
         values.insert(value_key, val);
 
+        // Populate avatar sub-filter values for HasAvatar
+        if c.field == ConditionField::HasAvatar {
+            if let Some(level) = c.avatar_level {
+                values.insert("avatar_level".to_string(), json!(level));
+            }
+            if let Some(constellation) = c.avatar_constellation {
+                values.insert("avatar_constellation".to_string(), json!(constellation));
+            }
+        }
+
         // Populate end value for Between operator
         if c.operator == ConditionOperator::Between {
             if let Some(end) = &c.value_end {
@@ -236,6 +246,22 @@ pub fn build_config_schema(conditions: &[Condition], verify_url: &str, players_u
                     },
                     {
                         "type": "number",
+                        "key": "avatar_level",
+                        "label": "Min Character Level (optional)",
+                        "description": "Minimum level for this character (1–90). Leave empty for any level.",
+                        "validation": { "min": 1, "max": 90 },
+                        "condition": { "field": "field", "equals": "hasAvatar" }
+                    },
+                    {
+                        "type": "number",
+                        "key": "avatar_constellation",
+                        "label": "Min Constellation (optional)",
+                        "description": "Minimum constellation for this character (0–6). Leave empty for any constellation.\nNote: Players must enable \"Display Constellation Level\" in their in-game profile for this data to be available.",
+                        "validation": { "min": 0, "max": 6 },
+                        "condition": { "field": "field", "equals": "hasAvatar" }
+                    },
+                    {
+                        "type": "number",
                         "key": "value_hasNameCard",
                         "label": "Namecard ID",
                         "description": "Go to https://gi.yatta.moe/en/archive/namecard , pick a namecard, and copy the ID from namecard/:id in the URL.",
@@ -253,7 +279,7 @@ pub fn build_config_schema(conditions: &[Condition], verify_url: &str, players_u
                         "type": "display",
                         "key": "examples",
                         "label": "Common setups",
-                        "value": "Adventure Rank >= 50  →  AR 50 and above\nWorld Level = 8  →  Max world level only\nAchievements >= 500  →  500+ achievements\nSpiral Abyss >= 12-3  →  Cleared floor 12 chamber 3\nSpiral Abyss Stars >= 33  →  33+ stars in current Abyss cycle\nRegion = Asia  →  Asia server players\nAdventure Rank between 30 to 55  →  AR 30 to 55 (inclusive)"
+                        "value": "Adventure Rank >= 50  →  AR 50 and above\nWorld Level = 8  →  Max world level only\nAchievements >= 500  →  500+ achievements\nSpiral Abyss >= 12-3  →  Cleared floor 12 chamber 3\nSpiral Abyss Stars >= 33  →  33+ stars in current Abyss cycle\nRegion = Asia  →  Asia server players\nAdventure Rank between 30 to 55  →  AR 30 to 55 (inclusive)\nShowcased Character + Level/Constellation  →  Has a specific character at a minimum level or constellation"
                     }
                 ]
             }
@@ -424,10 +450,21 @@ pub fn parse_config(config: &HashMap<String, Value>) -> Result<Vec<Condition>, A
         None
     };
 
+    // Parse optional avatar sub-filters (only for HasAvatar)
+    let (avatar_level, avatar_constellation) = if matches!(field, ConditionField::HasAvatar) {
+        let level = config.get("avatar_level").and_then(|v| v.as_i64());
+        let constellation = config.get("avatar_constellation").and_then(|v| v.as_i64());
+        (level, constellation)
+    } else {
+        (None, None)
+    };
+
     Ok(vec![Condition {
         field,
         operator,
         value,
         value_end,
+        avatar_level,
+        avatar_constellation,
     }])
 }

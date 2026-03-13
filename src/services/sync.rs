@@ -181,11 +181,34 @@ fn build_condition_where(conditions: &[Condition]) -> (String, Vec<ConditionBind
             }
             ConditionField::HasAvatar => {
                 let id = condition.value.as_i64().unwrap_or(0);
-                let idx = binds.len() + 1;
-                clauses.push(format!(
-                    "pc.player_info->'showAvatarInfoList' @> concat('[{{\"avatarId\":', ${idx}::text, '}}]')::jsonb"
-                ));
-                binds.push(ConditionBind::Int(id));
+                let has_sub_filters = condition.avatar_level.is_some() || condition.avatar_constellation.is_some();
+                if has_sub_filters {
+                    // Use EXISTS with jsonb_array_elements to check avatar ID + level/constellation
+                    let mut sub_clauses = vec![];
+                    let idx_id = binds.len() + 1;
+                    sub_clauses.push(format!("(elem->>'avatarId')::int = ${idx_id}"));
+                    binds.push(ConditionBind::Int(id));
+                    if let Some(min_level) = condition.avatar_level {
+                        let idx = binds.len() + 1;
+                        sub_clauses.push(format!("COALESCE((elem->>'level')::int, 0) >= ${idx}"));
+                        binds.push(ConditionBind::Int(min_level));
+                    }
+                    if let Some(min_const) = condition.avatar_constellation {
+                        let idx = binds.len() + 1;
+                        sub_clauses.push(format!("COALESCE((elem->>'talentLevel')::int, 0) >= ${idx}"));
+                        binds.push(ConditionBind::Int(min_const));
+                    }
+                    let sub_where = sub_clauses.join(" AND ");
+                    clauses.push(format!(
+                        "EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(pc.player_info->'showAvatarInfoList', '[]'::jsonb)) elem WHERE {sub_where})"
+                    ));
+                } else {
+                    let idx = binds.len() + 1;
+                    clauses.push(format!(
+                        "pc.player_info->'showAvatarInfoList' @> concat('[{{\"avatarId\":', ${idx}::text, '}}]')::jsonb"
+                    ));
+                    binds.push(ConditionBind::Int(id));
+                }
             }
             ConditionField::HasNameCard => {
                 let id = condition.value.as_i64().unwrap_or(0);
