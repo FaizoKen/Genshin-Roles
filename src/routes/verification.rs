@@ -593,11 +593,12 @@ pub async fn start(
             let next_fetch = chrono::Utc::now() + chrono::Duration::seconds(ttl as i64);
             let _ = sqlx::query(
                 "INSERT INTO player_cache (uid, player_info, region, enka_ttl, next_fetch_at, \
-                 level, world_level, achievements, abyss_progress, fetter_count) \
+                 level, world_level, achievements, abyss_progress, abyss_stars, fetter_count) \
                  VALUES ($1, $2, $3, $4, $5, \
                  COALESCE(($2->>'level')::int, 0), COALESCE(($2->>'worldLevel')::int, 0), \
                  COALESCE(($2->>'finishAchievementNum')::int, 0), \
                  COALESCE(($2->>'towerFloorIndex')::int, 0) * 10 + COALESCE(($2->>'towerLevelIndex')::int, 0), \
+                 COALESCE(($2->>'towerStarIndex')::int, 0), \
                  COALESCE(($2->>'fetterCount')::int, 0)) \
                  ON CONFLICT (uid) DO UPDATE SET \
                  player_info = $2, region = $3, enka_ttl = $4, \
@@ -605,6 +606,7 @@ pub async fn start(
                  level = COALESCE(($2->>'level')::int, 0), world_level = COALESCE(($2->>'worldLevel')::int, 0), \
                  achievements = COALESCE(($2->>'finishAchievementNum')::int, 0), \
                  abyss_progress = COALESCE(($2->>'towerFloorIndex')::int, 0) * 10 + COALESCE(($2->>'towerLevelIndex')::int, 0), \
+                 abyss_stars = COALESCE(($2->>'towerStarIndex')::int, 0), \
                  fetter_count = COALESCE(($2->>'fetterCount')::int, 0)",
             )
             .bind(&body.uid)
@@ -704,11 +706,12 @@ pub async fn check(
 
     sqlx::query(
         "INSERT INTO player_cache (uid, player_info, region, enka_ttl, next_fetch_at, \
-         level, world_level, achievements, abyss_progress, fetter_count) \
+         level, world_level, achievements, abyss_progress, abyss_stars, fetter_count) \
          VALUES ($1, $2, $3, $4, $5, \
          COALESCE(($2->>'level')::int, 0), COALESCE(($2->>'worldLevel')::int, 0), \
          COALESCE(($2->>'finishAchievementNum')::int, 0), \
          COALESCE(($2->>'towerFloorIndex')::int, 0) * 10 + COALESCE(($2->>'towerLevelIndex')::int, 0), \
+         COALESCE(($2->>'towerStarIndex')::int, 0), \
          COALESCE(($2->>'fetterCount')::int, 0)) \
          ON CONFLICT (uid) DO UPDATE SET \
          player_info = $2, region = $3, enka_ttl = $4, \
@@ -716,6 +719,7 @@ pub async fn check(
          level = COALESCE(($2->>'level')::int, 0), world_level = COALESCE(($2->>'worldLevel')::int, 0), \
          achievements = COALESCE(($2->>'finishAchievementNum')::int, 0), \
          abyss_progress = COALESCE(($2->>'towerFloorIndex')::int, 0) * 10 + COALESCE(($2->>'towerLevelIndex')::int, 0), \
+         abyss_stars = COALESCE(($2->>'towerStarIndex')::int, 0), \
          fetter_count = COALESCE(($2->>'fetterCount')::int, 0)",
     )
     .bind(&uid)

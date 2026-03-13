@@ -195,12 +195,22 @@ fn build_condition_where(conditions: &[Condition]) -> (String, Vec<ConditionBind
                 ));
                 binds.push(ConditionBind::Int(id));
             }
-            ConditionField::SpiralAbyss => {
-                let op = condition.operator.sql_operator();
+            ConditionField::SpiralAbyss | ConditionField::TowerStarIndex => {
+                let col = condition.field.sql_column().unwrap();
                 let val = condition.value.as_i64().unwrap_or(0);
-                let idx = binds.len() + 1;
-                clauses.push(format!("pc.abyss_progress {op} ${idx}"));
-                binds.push(ConditionBind::Int(val));
+                if matches!(condition.operator, crate::models::condition::ConditionOperator::Between) {
+                    let end = condition.value_end.as_ref().and_then(|v| v.as_i64()).unwrap_or(val);
+                    let idx_start = binds.len() + 1;
+                    let idx_end = binds.len() + 2;
+                    clauses.push(format!("{col} >= ${idx_start} AND {col} <= ${idx_end}"));
+                    binds.push(ConditionBind::Int(val));
+                    binds.push(ConditionBind::Int(end));
+                } else {
+                    let op = condition.operator.sql_operator();
+                    let idx = binds.len() + 1;
+                    clauses.push(format!("{col} {op} ${idx}"));
+                    binds.push(ConditionBind::Int(val));
+                }
                 // Freshness gate: compute per-region reset timestamps
                 let na_reset = last_abyss_reset_utc("NA");
                 let eu_reset = last_abyss_reset_utc("EU");
@@ -220,11 +230,20 @@ fn build_condition_where(conditions: &[Condition]) -> (String, Vec<ConditionBind
             }
             numeric_field => {
                 let col = numeric_field.sql_column().unwrap(); // safe: Region, SpiralAbyss handled above
-                let op = condition.operator.sql_operator();
                 let val = condition.value.as_i64().unwrap_or(0);
-                let idx = binds.len() + 1;
-                clauses.push(format!("{col} {op} ${idx}"));
-                binds.push(ConditionBind::Int(val));
+                if matches!(condition.operator, crate::models::condition::ConditionOperator::Between) {
+                    let end = condition.value_end.as_ref().and_then(|v| v.as_i64()).unwrap_or(val);
+                    let idx_start = binds.len() + 1;
+                    let idx_end = binds.len() + 2;
+                    clauses.push(format!("{col} >= ${idx_start} AND {col} <= ${idx_end}"));
+                    binds.push(ConditionBind::Int(val));
+                    binds.push(ConditionBind::Int(end));
+                } else {
+                    let op = condition.operator.sql_operator();
+                    let idx = binds.len() + 1;
+                    clauses.push(format!("{col} {op} ${idx}"));
+                    binds.push(ConditionBind::Int(val));
+                }
             }
         }
     }

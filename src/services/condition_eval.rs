@@ -53,24 +53,40 @@ fn evaluate_single(
             let chamber = player_info["towerLevelIndex"].as_i64().unwrap_or(0);
             let actual = floor * 10 + chamber;
             let expected = condition.value.as_i64().unwrap_or(0);
-            compare(actual, expected, &condition.operator)
+            compare(actual, expected, &condition.operator, &condition.value_end)
+        }
+        ConditionField::TowerStarIndex => {
+            // Freshness gate: resets on the same cycle as Spiral Abyss
+            if let Some(fetched) = fetched_at {
+                let last_reset = last_abyss_reset_utc(region.unwrap_or("NA"));
+                if fetched < last_reset {
+                    return false;
+                }
+            }
+            let actual = player_info["towerStarIndex"].as_i64().unwrap_or(0);
+            let expected = condition.value.as_i64().unwrap_or(0);
+            compare(actual, expected, &condition.operator, &condition.value_end)
         }
         numeric_field => {
             let field_name = numeric_field.json_key();
             let actual = player_info[field_name].as_i64().unwrap_or(0);
             let expected = condition.value.as_i64().unwrap_or(0);
-            compare(actual, expected, &condition.operator)
+            compare(actual, expected, &condition.operator, &condition.value_end)
         }
     }
 }
 
-fn compare(actual: i64, expected: i64, operator: &ConditionOperator) -> bool {
+fn compare(actual: i64, expected: i64, operator: &ConditionOperator, value_end: &Option<serde_json::Value>) -> bool {
     match operator {
         ConditionOperator::Eq => actual == expected,
         ConditionOperator::Gt => actual > expected,
         ConditionOperator::Gte => actual >= expected,
         ConditionOperator::Lt => actual < expected,
         ConditionOperator::Lte => actual <= expected,
+        ConditionOperator::Between => {
+            let end = value_end.as_ref().and_then(|v| v.as_i64()).unwrap_or(expected);
+            actual >= expected && actual <= end
+        }
     }
 }
 
@@ -159,6 +175,7 @@ mod tests {
             "finishAchievementNum": 458,
             "towerFloorIndex": 12,
             "towerLevelIndex": 3,
+            "towerStarIndex": 36,
             "fetterCount": 13,
             "showAvatarInfoList": [
                 {"avatarId": 10000021, "level": 90},
@@ -174,6 +191,7 @@ mod tests {
             field: ConditionField::Level,
             operator: ConditionOperator::Gte,
             value: json!(50),
+            value_end: None,
         }];
         assert!(evaluate_conditions(&conditions, &sample_player_info(), Some("NA"), None));
     }
@@ -184,6 +202,7 @@ mod tests {
             field: ConditionField::Level,
             operator: ConditionOperator::Gte,
             value: json!(60),
+            value_end: None,
         }];
         assert!(!evaluate_conditions(&conditions, &sample_player_info(), Some("NA"), None));
     }
@@ -194,6 +213,7 @@ mod tests {
             field: ConditionField::Region,
             operator: ConditionOperator::Eq,
             value: json!("NA"),
+            value_end: None,
         }];
         assert!(evaluate_conditions(&conditions, &sample_player_info(), Some("NA"), None));
         assert!(!evaluate_conditions(&conditions, &sample_player_info(), Some("EU"), None));
@@ -205,6 +225,7 @@ mod tests {
             field: ConditionField::HasAvatar,
             operator: ConditionOperator::Eq,
             value: json!(10000021),
+            value_end: None,
         }];
         assert!(evaluate_conditions(&conditions, &sample_player_info(), None, None));
     }
@@ -215,6 +236,7 @@ mod tests {
             field: ConditionField::HasAvatar,
             operator: ConditionOperator::Eq,
             value: json!(99999999),
+            value_end: None,
         }];
         assert!(!evaluate_conditions(&conditions, &sample_player_info(), None, None));
     }
@@ -225,6 +247,7 @@ mod tests {
             field: ConditionField::HasNameCard,
             operator: ConditionOperator::Eq,
             value: json!(210051),
+            value_end: None,
         }];
         assert!(evaluate_conditions(&conditions, &sample_player_info(), None, None));
     }
@@ -236,16 +259,19 @@ mod tests {
                 field: ConditionField::Level,
                 operator: ConditionOperator::Gte,
                 value: json!(50),
+                value_end: None,
             },
             Condition {
                 field: ConditionField::WorldLevel,
                 operator: ConditionOperator::Eq,
                 value: json!(8),
+                value_end: None,
             },
             Condition {
                 field: ConditionField::Region,
                 operator: ConditionOperator::Eq,
                 value: json!("NA"),
+                value_end: None,
             },
         ];
         assert!(evaluate_conditions(&conditions, &sample_player_info(), Some("NA"), None));
@@ -258,11 +284,13 @@ mod tests {
                 field: ConditionField::Level,
                 operator: ConditionOperator::Gte,
                 value: json!(50),
+                value_end: None,
             },
             Condition {
                 field: ConditionField::Region,
                 operator: ConditionOperator::Eq,
                 value: json!("EU"),
+                value_end: None,
             },
         ];
         assert!(!evaluate_conditions(&conditions, &sample_player_info(), Some("NA"), None));
@@ -275,6 +303,7 @@ mod tests {
             field: ConditionField::SpiralAbyss,
             operator: ConditionOperator::Gte,
             value: json!(121), // 12-1
+            value_end: None,
         }];
         // No fetched_at → freshness check skipped
         assert!(evaluate_conditions(&conditions, &sample_player_info(), Some("NA"), None));
@@ -286,6 +315,7 @@ mod tests {
             field: ConditionField::SpiralAbyss,
             operator: ConditionOperator::Eq,
             value: json!(123), // 12-3
+            value_end: None,
         }];
         assert!(evaluate_conditions(&conditions, &sample_player_info(), Some("NA"), None));
     }
@@ -296,6 +326,7 @@ mod tests {
             field: ConditionField::SpiralAbyss,
             operator: ConditionOperator::Gte,
             value: json!(124), // higher than 12-3
+            value_end: None,
         }];
         assert!(!evaluate_conditions(&conditions, &sample_player_info(), Some("NA"), None));
     }
@@ -306,6 +337,7 @@ mod tests {
             field: ConditionField::SpiralAbyss,
             operator: ConditionOperator::Gte,
             value: json!(121),
+            value_end: None,
         }];
         // fetched_at far in the past → stale → should fail
         let old_date = DateTime::parse_from_rfc3339("2020-01-01T00:00:00Z")
@@ -325,6 +357,7 @@ mod tests {
             field: ConditionField::SpiralAbyss,
             operator: ConditionOperator::Gte,
             value: json!(121),
+            value_end: None,
         }];
         // fetched_at = now → fresh
         let now = Utc::now();
@@ -337,14 +370,104 @@ mod tests {
     }
 
     #[test]
+    fn test_tower_star_index_gte() {
+        let conditions = vec![Condition {
+            field: ConditionField::TowerStarIndex,
+            operator: ConditionOperator::Gte,
+            value: json!(30),
+            value_end: None,
+        }];
+        assert!(evaluate_conditions(&conditions, &sample_player_info(), Some("NA"), None));
+    }
+
+    #[test]
+    fn test_tower_star_index_fail() {
+        let conditions = vec![Condition {
+            field: ConditionField::TowerStarIndex,
+            operator: ConditionOperator::Gt,
+            value: json!(36),
+            value_end: None,
+        }];
+        assert!(!evaluate_conditions(&conditions, &sample_player_info(), Some("NA"), None));
+    }
+
+    #[test]
+    fn test_tower_star_index_stale_data() {
+        let conditions = vec![Condition {
+            field: ConditionField::TowerStarIndex,
+            operator: ConditionOperator::Gte,
+            value: json!(30),
+            value_end: None,
+        }];
+        let old_date = DateTime::parse_from_rfc3339("2020-01-01T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        assert!(!evaluate_conditions(
+            &conditions,
+            &sample_player_info(),
+            Some("NA"),
+            Some(old_date),
+        ));
+    }
+
+    #[test]
     fn test_missing_abyss_fields_defaults_zero() {
         let player = json!({"level": 50});
         let conditions = vec![Condition {
             field: ConditionField::SpiralAbyss,
             operator: ConditionOperator::Gte,
             value: json!(1),
+            value_end: None,
         }];
         assert!(!evaluate_conditions(&conditions, &player, None, None));
+    }
+
+    #[test]
+    fn test_between_level_in_range() {
+        // Player level is 57, range 50-60 should pass
+        let conditions = vec![Condition {
+            field: ConditionField::Level,
+            operator: ConditionOperator::Between,
+            value: json!(50),
+            value_end: Some(json!(60)),
+        }];
+        assert!(evaluate_conditions(&conditions, &sample_player_info(), Some("NA"), None));
+    }
+
+    #[test]
+    fn test_between_level_out_of_range() {
+        // Player level is 57, range 58-60 should fail
+        let conditions = vec![Condition {
+            field: ConditionField::Level,
+            operator: ConditionOperator::Between,
+            value: json!(58),
+            value_end: Some(json!(60)),
+        }];
+        assert!(!evaluate_conditions(&conditions, &sample_player_info(), Some("NA"), None));
+    }
+
+    #[test]
+    fn test_between_level_exact_boundary() {
+        // Player level is 57, range 57-57 should pass (inclusive)
+        let conditions = vec![Condition {
+            field: ConditionField::Level,
+            operator: ConditionOperator::Between,
+            value: json!(57),
+            value_end: Some(json!(57)),
+        }];
+        assert!(evaluate_conditions(&conditions, &sample_player_info(), Some("NA"), None));
+    }
+
+    #[test]
+    fn test_between_spiral_abyss() {
+        // Player has 12-3 (123), range 12-1 (121) to 12-3 (123) should pass
+        let conditions = vec![Condition {
+            field: ConditionField::SpiralAbyss,
+            operator: ConditionOperator::Between,
+            value: json!(121),
+            value_end: Some(json!(123)),
+        }];
+        assert!(evaluate_conditions(&conditions, &sample_player_info(), Some("NA"), None));
     }
 
     #[test]

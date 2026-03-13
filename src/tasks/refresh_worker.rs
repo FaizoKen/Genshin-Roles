@@ -119,6 +119,7 @@ pub async fn run(state: Arc<AppState>) {
                      world_level = COALESCE(($1->>'worldLevel')::int, 0), \
                      achievements = COALESCE(($1->>'finishAchievementNum')::int, 0), \
                      abyss_progress = COALESCE(($1->>'towerFloorIndex')::int, 0) * 10 + COALESCE(($1->>'towerLevelIndex')::int, 0), \
+                     abyss_stars = COALESCE(($1->>'towerStarIndex')::int, 0), \
                      fetter_count = COALESCE(($1->>'fetterCount')::int, 0) \
                      WHERE uid = $5",
                 )
