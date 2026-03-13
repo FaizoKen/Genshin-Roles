@@ -118,4 +118,10 @@ pub struct Condition {
     pub value: serde_json::Value,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub value_end: Option<serde_json::Value>,
+    /// Optional: minimum character level for HasAvatar (1–90)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avatar_level: Option<i64>,
+    /// Optional: minimum constellation for HasAvatar (0–6)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avatar_constellation: Option<i64>,
 }
