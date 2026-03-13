@@ -7,6 +7,7 @@ pub enum ConditionField {
     WorldLevel,
     FinishAchievementNum,
     SpiralAbyss,
+    TowerStarIndex,
     FetterCount,
     Region,
     HasAvatar,
@@ -24,6 +25,7 @@ impl ConditionField {
             Self::WorldLevel => "worldLevel",
             Self::FinishAchievementNum => "finishAchievementNum",
             Self::SpiralAbyss => "spiralAbyss",
+            Self::TowerStarIndex => "towerStarIndex",
             Self::FetterCount => "fetterCount",
             Self::Region => "region",
             Self::HasAvatar => "hasAvatar",
@@ -39,6 +41,7 @@ impl ConditionField {
             Self::WorldLevel => Some("pc.world_level"),
             Self::FinishAchievementNum => Some("pc.achievements"),
             Self::SpiralAbyss => Some("pc.abyss_progress"),
+            Self::TowerStarIndex => Some("pc.abyss_stars"),
             Self::FetterCount => Some("pc.fetter_count"),
             Self::Region => Some("pc.region"),
             Self::HasAvatar | Self::HasNameCard => None,
@@ -51,6 +54,7 @@ impl ConditionField {
             "worldLevel" => Some(Self::WorldLevel),
             "finishAchievementNum" => Some(Self::FinishAchievementNum),
             "spiralAbyss" => Some(Self::SpiralAbyss),
+            "towerStarIndex" => Some(Self::TowerStarIndex),
             "fetterCount" => Some(Self::FetterCount),
             "region" => Some(Self::Region),
             "hasAvatar" => Some(Self::HasAvatar),
@@ -68,6 +72,7 @@ pub enum ConditionOperator {
     Gte,
     Lt,
     Lte,
+    Between,
 }
 
 impl ConditionOperator {
@@ -78,6 +83,7 @@ impl ConditionOperator {
             "gte" => Some(Self::Gte),
             "lt" => Some(Self::Lt),
             "lte" => Some(Self::Lte),
+            "between" => Some(Self::Between),
             _ => None,
         }
     }
@@ -89,6 +95,7 @@ impl ConditionOperator {
             Self::Gte => "gte",
             Self::Lt => "lt",
             Self::Lte => "lte",
+            Self::Between => "between",
         }
     }
 
@@ -99,6 +106,7 @@ impl ConditionOperator {
             Self::Gte => ">=",
             Self::Lt => "<",
             Self::Lte => "<=",
+            Self::Between => "BETWEEN",
         }
     }
 }
@@ -108,4 +116,6 @@ pub struct Condition {
     pub field: ConditionField,
     pub operator: ConditionOperator,
     pub value: serde_json::Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value_end: Option<serde_json::Value>,
 }
