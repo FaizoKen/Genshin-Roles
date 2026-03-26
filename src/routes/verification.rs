@@ -101,6 +101,8 @@ pub fn render_verify_page(base_url: &str) -> String {
         .trust-note {{ font-size: 13px; color: #94a3b8; background: #111827; border-left: 3px solid #3b82f6; padding: 10px 14px; border-radius: 0 6px 6px 0; margin: 10px 0; line-height: 1.6; }}
         .trust-note strong {{ color: #e2e8f0; }}
         .trust-note a {{ color: #74b9ff; }}
+        .btn-logout {{ background: transparent; color: #94a3b8; border: 1px solid #1e293b; padding: 5px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; font-family: inherit; transition: all .15s; }}
+        .btn-logout:hover {{ color: #f87171; border-color: #7f1d1d; background: #7f1d1d22; }}
         .info-row {{ display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 14px; }}
         .info-row .label {{ color: #64748b; min-width: 80px; }}
         .info-row .val {{ color: #e8b44a; font-weight: 600; }}
@@ -110,9 +112,12 @@ pub fn render_verify_page(base_url: &str) -> String {
     </style>
 </head>
 <body>
-    <div style="display:flex; align-items:center; gap:10px; margin-bottom:4px;">
-        <h1 style="margin:0;">Genshin Roles</h1>
-        <span style="font-size:11px; color:#64748b; background:#1e293b; padding:2px 8px; border-radius:4px;">Powered by <a href="https://rolelogic.faizo.net" target="_blank" rel="noopener" style="color:#74b9ff; text-decoration:none;">RoleLogic</a></span>
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;">
+        <div style="display:flex; align-items:center; gap:10px;">
+            <h1 style="margin:0;">Genshin Roles</h1>
+            <span style="font-size:11px; color:#64748b; background:#1e293b; padding:2px 8px; border-radius:4px;">Powered by <a href="https://rolelogic.faizo.net" target="_blank" rel="noopener" style="color:#74b9ff; text-decoration:none;">RoleLogic</a></span>
+        </div>
+        <button id="logout-btn" class="btn-logout hidden" onclick="doLogout()">Logout</button>
     </div>
     <p class="subtitle">Link your Discord account with your Genshin Impact UID to automatically receive server roles based on your in-game progress.</p>
 
@@ -230,6 +235,7 @@ pub fn render_verify_page(base_url: &str) -> String {
         try {{
             const s = await api('GET', '/verify/status');
             currentName = s.display_name || '';
+            document.getElementById('logout-btn').classList.remove('hidden');
             if (s.linked) {{
                 document.getElementById('linked-discord').textContent = s.display_name;
                 document.getElementById('linked-uid').textContent = s.linked;
@@ -318,6 +324,16 @@ pub fn render_verify_page(base_url: &str) -> String {
             showMsg(e.message, 'error');
             btn.disabled = false; btn.textContent = 'Verify Now';
         }}
+    }}
+
+    async function doLogout() {{
+        clearMsg();
+        try {{
+            await api('POST', '/verify/logout');
+            document.getElementById('logout-btn').classList.add('hidden');
+            showSection('login-section');
+            showMsg('Logged out.', 'success');
+        }} catch (e) {{ showMsg(e.message, 'error'); }}
     }}
 
     async function doUnlink() {{
@@ -752,6 +768,12 @@ pub async fn check(
         "nickname": enka_result.player_info.get("nickname").and_then(|v| v.as_str()),
         "level": enka_result.player_info.get("level").and_then(|v| v.as_i64()),
     })))
+}
+
+pub async fn logout(jar: CookieJar) -> (CookieJar, Json<Value>) {
+    let cookie = Cookie::build(SESSION_COOKIE).path("/");
+    let jar = jar.remove(cookie);
+    (jar, Json(json!({"success": true})))
 }
 
 pub async fn unlink(

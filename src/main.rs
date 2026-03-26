@@ -94,6 +94,7 @@ async fn main() {
         .route("/verify/start", post(routes::verification::start))
         .route("/verify/check", post(routes::verification::check))
         .route("/verify/unlink", post(routes::verification::unlink))
+        .route("/verify/logout", post(routes::verification::logout))
         // Player list (public)
         .route("/players/{guild_id}", get(routes::players::players_page))
         .route("/players/{guild_id}/data", get(routes::players::players_data))
