@@ -27,7 +27,7 @@ pub struct AppState {
     pub config_sync_tx: mpsc::Sender<ConfigSyncEvent>,
     pub enka_client: EnkaClient,
     pub rl_client: RoleLogicClient,
-    pub oauth_http: reqwest::Client,
+    pub http: reqwest::Client,
     pub verify_html: bytes::Bytes,
     pub players_html: bytes::Bytes,
 }
@@ -55,10 +55,10 @@ async fn main() {
 
     let enka_client = EnkaClient::new(&app_config.enka_user_agent);
     let rl_client = RoleLogicClient::new();
-    let oauth_http = reqwest::Client::builder()
+    let http = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
         .build()
-        .expect("Failed to build OAuth HTTP client");
+        .expect("Failed to build HTTP client");
     let verify_html = bytes::Bytes::from(routes::verification::render_verify_page(&app_config.base_url));
     let players_html = bytes::Bytes::from(routes::players::render_players_page(&app_config.base_url));
 
@@ -69,7 +69,7 @@ async fn main() {
         config_sync_tx,
         enka_client,
         rl_client,
-        oauth_http,
+        http,
         verify_html,
         players_html,
     });
@@ -77,30 +77,30 @@ async fn main() {
     tokio::spawn(tasks::refresh_worker::run(Arc::clone(&state)));
     tokio::spawn(tasks::player_sync_worker::run(player_sync_rx, Arc::clone(&state)));
     tokio::spawn(tasks::config_sync_worker::run(config_sync_rx, Arc::clone(&state)));
-    tokio::spawn(tasks::guild_refresh_worker::run(Arc::clone(&state)));
     tokio::spawn(tasks::cleanup_expired(Arc::clone(&state)));
 
     let app = Router::new()
-        // Plugin endpoints (called by RoleLogic)
-        .route("/register", post(routes::plugin::register))
-        .route("/config", get(routes::plugin::get_config))
-        .route("/config", post(routes::plugin::post_config))
-        .route("/config", delete(routes::plugin::delete_config))
-        // Verification endpoints (user-facing)
-        .route("/verify", get(routes::verification::verify_page))
-        .route("/verify/login", get(routes::verification::login))
-        .route("/verify/callback", get(routes::verification::callback))
-        .route("/verify/status", get(routes::verification::status))
-        .route("/verify/start", post(routes::verification::start))
-        .route("/verify/check", post(routes::verification::check))
-        .route("/verify/unlink", post(routes::verification::unlink))
-        .route("/verify/logout", post(routes::verification::logout))
-        // Player list (public)
-        .route("/players/{guild_id}", get(routes::players::players_page))
-        .route("/players/{guild_id}/data", get(routes::players::players_data))
-        // Health & static
-        .route("/favicon.ico", get(routes::health::favicon))
-        .route("/health", get(routes::health::health))
+        .nest("/genshin-player-role", Router::new()
+            // Plugin endpoints (called by RoleLogic)
+            .route("/register", post(routes::plugin::register))
+            .route("/config", get(routes::plugin::get_config))
+            .route("/config", post(routes::plugin::post_config))
+            .route("/config", delete(routes::plugin::delete_config))
+            // Verification endpoints (user-facing)
+            .route("/verify", get(routes::verification::verify_page))
+            .route("/verify/login", get(routes::verification::login))
+            .route("/verify/status", get(routes::verification::status))
+            .route("/verify/start", post(routes::verification::start))
+            .route("/verify/check", post(routes::verification::check))
+            .route("/verify/unlink", post(routes::verification::unlink))
+            .route("/verify/logout", post(routes::verification::logout))
+            // Player list (public)
+            .route("/players/{guild_id}", get(routes::players::players_page))
+            .route("/players/{guild_id}/data", get(routes::players::players_data))
+            // Health & static
+            .route("/favicon.ico", get(routes::health::favicon))
+            .route("/health", get(routes::health::health))
+        )
         .layer(TraceLayer::new_for_http())
         .layer(CorsLayer::permissive())
         .with_state(state);

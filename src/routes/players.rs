@@ -157,7 +157,8 @@ pub fn render_players_page(base_url: &str) -> String {
     </div>
 
     <script>
-    const guildId = window.location.pathname.split('/').filter(Boolean)[1] || '';
+    const parts = window.location.pathname.split('/').filter(Boolean);
+    const guildId = parts[parts.indexOf('players') + 1] || '';
     const PER_PAGE = 20;
     const NUM_COLS = ['level','world_level','achievements','abyss_progress','fetter_count'];
 
@@ -241,7 +242,7 @@ pub fn render_players_page(base_url: &str) -> String {
             sort: state.sort, order: state.order
         }});
         if (state.search) params.set('search', state.search);
-        const res = await fetch('/players/' + encodeURIComponent(guildId) + '/data?' + params);
+        const res = await fetch('{base_url}/players/' + encodeURIComponent(guildId) + '/data?' + params);
         if (!res.ok) {{
             const data = await res.json().catch(() => ({{}}));
             throw new Error(data.error || 'Failed to load player data');
