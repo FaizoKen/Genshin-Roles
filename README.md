@@ -2,10 +2,12 @@
 
 A [RoleLogic](https://rolelogic.faizo.net) plugin that links Discord accounts with Genshin Impact player data via [Enka.Network](https://enka.network). Users verify UID ownership by placing a code in their in-game signature, then roles are automatically assigned based on player progress (AR level, Spiral Abyss, achievements, etc.).
 
+> **Requires [Auth Gateway](../Auth-Gateway/)** — Discord login is handled by the centralized Auth Gateway. This plugin reads the shared `rl_session` cookie set by the gateway.
+
 ## How it works
 
 1. **Registers** guild/role pairs via the RoleLogic plugin API
-2. **Authenticates** users through Discord OAuth
+2. **Authenticates** users through the centralized Auth Gateway (Discord OAuth)
 3. **Verifies** Genshin UID ownership by checking a generated code in the player's in-game signature
 4. **Fetches** player data from Enka.Network (characters, Spiral Abyss, achievements)
 5. **Syncs** verified player data to RoleLogic for automatic role assignment based on configurable conditions
@@ -19,16 +21,14 @@ cp .env.example .env
 
 ### Environment Variables
 
-| Variable                | Required | Default                              | Description                     |
-| ----------------------- | -------- | ------------------------------------ | ------------------------------- |
-| `DATABASE_URL`          | Yes      | —                                    | PostgreSQL connection string    |
-| `DISCORD_CLIENT_ID`     | Yes      | —                                    | Discord OAuth app ID            |
-| `DISCORD_CLIENT_SECRET` | Yes      | —                                    | Discord OAuth app secret        |
-| `SESSION_SECRET`        | Yes      | —                                    | Secret for session encryption   |
-| `BASE_URL`              | Yes      | —                                    | Public URL for redirects        |
-| `LISTEN_ADDR`           | No       | `0.0.0.0:8080`                       | Server bind address             |
-| `ENKA_USER_AGENT`       | No       | `GenshinRoles/1.0`                   | User agent for Enka.Network API |
-| `RUST_LOG`              | No       | `genshin_roles=info,tower_http=info` | Log level                       |
+| Variable         | Required | Default                              | Description                                          |
+| ---------------- | -------- | ------------------------------------ | ---------------------------------------------------- |
+| `DATABASE_URL`   | Yes      | --                                   | PostgreSQL connection string                         |
+| `SESSION_SECRET` | Yes      | --                                   | HMAC key for `rl_session` cookie (must match Auth Gateway) |
+| `BASE_URL`       | Yes      | --                                   | Full URL with path prefix, e.g. `https://your-domain.com/genshin-player-role` |
+| `LISTEN_ADDR`    | No       | `0.0.0.0:8080`                       | Server bind address                                  |
+| `ENKA_USER_AGENT`| No       | `GenshinRoles/1.0`                   | User agent for Enka.Network API                      |
+| `RUST_LOG`       | No       | `genshin_roles=info,tower_http=info` | Log level                                            |
 
 ## Run
 
@@ -47,6 +47,8 @@ cargo build --release  # production
 
 ## Endpoints
 
+All routes are nested under `/genshin-player-role`:
+
 | Method   | Path                       | Description                             |
 | -------- | -------------------------- | --------------------------------------- |
 | `GET`    | `/health`                  | Health check                            |
@@ -55,8 +57,7 @@ cargo build --release  # production
 | `POST`   | `/config`                  | Update role link conditions             |
 | `DELETE` | `/config`                  | Delete a registration                   |
 | `GET`    | `/verify`                  | Verification page                       |
-| `GET`    | `/verify/login`            | Discord OAuth login                     |
-| `GET`    | `/verify/callback`         | Discord OAuth callback                  |
+| `GET`    | `/verify/login`            | Redirects to Auth Gateway for Discord login |
 | `GET`    | `/verify/status`           | Check linked account status             |
 | `POST`   | `/verify/start`            | Start verification with a Genshin UID   |
 | `POST`   | `/verify/check`            | Check verification code in signature    |
@@ -66,10 +67,11 @@ cargo build --release  # production
 
 ## Usage
 
-1. In the RoleLogic dashboard, create a Role Link and set the **Custom Plugin URL** to your instance's public URL
-2. RoleLogic will automatically register the guild/role pair
-3. Users visit the verification page, sign in with Discord, and link their Genshin UID
-4. Roles are assigned automatically based on the conditions you configure
+1. Ensure the [Auth Gateway](../Auth-Gateway/) is running on `your-domain.com/auth/*`
+2. In the RoleLogic dashboard, create a Role Link and set the **Custom Plugin URL** to `https://your-domain.com/genshin-player-role`
+3. RoleLogic will automatically register the guild/role pair
+4. Users visit the verification page, sign in with Discord (via Auth Gateway), and link their Genshin UID
+5. Roles are assigned automatically based on the conditions you configure
 
 ## API Reference
 
