@@ -574,24 +574,30 @@ pub async fn players_data(
         "players_data: session verified locally"
     );
 
-    // 2. Determine the effective required permission for this guild.
-    //    Most-permissive wins: if ANY role link for this guild allows 'members',
-    //    then members may view; otherwise only managers may view.
-    let guild_perm: Option<(Option<bool>, i64)> = sqlx::query_as(
-        "SELECT BOOL_OR(view_permission = 'members') AS allow_members, COUNT(*) AS link_count \
-         FROM role_links WHERE guild_id = $1",
+    // 2. Look up the guild's Player List Access policy.
+    // The setting lives in `guild_settings` (one row per guild). We also check
+    // that at least one role link exists for the guild — if none, the plugin
+    // hasn't been configured for this server at all and we 404.
+    let guild_row: Option<(bool, String)> = sqlx::query_as(
+        "SELECT \
+           EXISTS(SELECT 1 FROM role_links WHERE guild_id = $1) AS has_link, \
+           COALESCE( \
+             (SELECT view_permission FROM guild_settings WHERE guild_id = $1), \
+             'members' \
+           ) AS view_permission",
     )
     .bind(&guild_id)
     .fetch_optional(&state.pool)
     .await?;
 
-    let (allow_members, link_count) = guild_perm.unwrap_or((Some(false), 0));
-    if link_count == 0 {
+    let (has_link, view_permission) =
+        guild_row.unwrap_or((false, "members".to_string()));
+    if !has_link {
         return Err(AppError::NotFound(
             "No player list is configured for this server.".into(),
         ));
     }
-    let members_allowed = allow_members.unwrap_or(false);
+    let members_allowed = view_permission == "members";
 
     // 3. Ask the Auth Gateway who is in this guild and whether the viewer is a manager.
     // The Auth Gateway is the single source of truth for Discord guild membership and

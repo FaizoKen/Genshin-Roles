@@ -45,6 +45,16 @@ pub async fn register(
     .execute(&state.pool)
     .await?;
 
+    // Ensure a guild_settings row exists for this guild so reads always find one.
+    // Default 'members'; left untouched if a row already exists.
+    sqlx::query(
+        "INSERT INTO guild_settings (guild_id) VALUES ($1) \
+         ON CONFLICT (guild_id) DO NOTHING",
+    )
+    .bind(&body.guild_id)
+    .execute(&state.pool)
+    .await?;
+
     tracing::info!(
         guild_id = body.guild_id,
         role_id = body.role_id,
@@ -65,19 +75,29 @@ pub async fn get_config(
         (
             String,
             sqlx::types::Json<Vec<crate::models::condition::Condition>>,
-            String,
         ),
     >(
-        "SELECT guild_id, conditions, view_permission FROM role_links WHERE api_token = $1",
+        "SELECT guild_id, conditions FROM role_links WHERE api_token = $1",
     )
     .bind(&token)
     .fetch_optional(&state.pool)
     .await?
     .ok_or(AppError::Unauthorized)?;
 
+    // view_permission is per-guild, not per-role-link. Default to 'members'
+    // if no row exists yet (e.g. legacy guilds before migration 012).
+    let view_permission: String = sqlx::query_scalar(
+        "SELECT view_permission FROM guild_settings WHERE guild_id = $1",
+    )
+    .bind(&link.0)
+    .fetch_optional(&state.pool)
+    .await?
+    .unwrap_or_else(|| "members".to_string());
+
     let verify_url = format!("{}/verify", state.config.base_url);
     let players_url = format!("{}/players/{}", state.config.base_url, link.0);
-    let schema = schema::build_config_schema(&link.1, &verify_url, &players_url, &link.2);
+    let schema =
+        schema::build_config_schema(&link.1, &verify_url, &players_url, &view_permission);
 
     Ok(Json(schema))
 }
@@ -126,16 +146,33 @@ pub async fn post_config(
         ));
     }
 
+    // Conditions live on role_links (per-role); view_permission lives on
+    // guild_settings (per-guild). Write both in one transaction so a partial
+    // failure can't leave the two out of sync.
+    let mut tx = state.pool.begin().await?;
+
     sqlx::query(
-        "UPDATE role_links SET conditions = $1, view_permission = $2, updated_at = now() \
-         WHERE guild_id = $3 AND role_id = $4",
+        "UPDATE role_links SET conditions = $1, updated_at = now() \
+         WHERE guild_id = $2 AND role_id = $3",
     )
     .bind(sqlx::types::Json(&conditions))
-    .bind(&view_permission)
     .bind(&body.guild_id)
     .bind(&body.role_id)
-    .execute(&state.pool)
+    .execute(&mut *tx)
     .await?;
+
+    sqlx::query(
+        "INSERT INTO guild_settings (guild_id, view_permission, updated_at) \
+         VALUES ($1, $2, now()) \
+         ON CONFLICT (guild_id) \
+         DO UPDATE SET view_permission = EXCLUDED.view_permission, updated_at = now()",
+    )
+    .bind(&body.guild_id)
+    .bind(&view_permission)
+    .execute(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
 
     tracing::info!(
         guild_id = body.guild_id,

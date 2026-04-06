@@ -101,12 +101,13 @@ pub fn build_config_schema(
             },
             {
                 "title": "Player List Access",
-                "description": "Control who can view the verified-player list for this server. If multiple role links exist for this server, the most permissive setting applies.",
+                "description": "Control who can view the verified-player list for this server. This setting is shared across the entire server — changing it from any role link's config will update it for every role link in this server.",
                 "fields": [
                     {
                         "type": "radio",
                         "key": "view_permission",
                         "label": "Who can view the player list",
+                        "description": "Applies server-wide. Updating this from any role link affects every role link for this server.",
                         "default_value": "members",
                         "options": [
                             {"label": "Server members (anyone in this server)", "value": "members"},
