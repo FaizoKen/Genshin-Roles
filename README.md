@@ -2,7 +2,7 @@
 
 A [RoleLogic](https://rolelogic.faizo.net) plugin that links Discord accounts with Genshin Impact player data via [Enka.Network](https://enka.network). Users verify UID ownership by placing a code in their in-game signature, then roles are automatically assigned based on player progress (AR level, Spiral Abyss, achievements, etc.).
 
-> **Requires [Auth Gateway](../Auth-Gateway/)** — Discord login is handled by the centralized Auth Gateway. This plugin reads the shared `rl_session` cookie set by the gateway.
+> **Requires [Auth Gateway](https://github.com/FaizoKen/Auth-Gateway)** — Discord login is handled by the centralized Auth Gateway. This plugin reads the shared `rl_session` cookie set by the gateway.
 
 ## How it works
 
@@ -67,7 +67,7 @@ All routes are nested under `/genshin-player-role`:
 
 ## Usage
 
-1. Ensure the [Auth Gateway](../Auth-Gateway/) is running on `your-domain.com/auth/*`
+1. Ensure the [Auth Gateway](https://github.com/FaizoKen/Auth-Gateway) is running on `your-domain.com/auth/*`
 2. In the RoleLogic dashboard, create a Role Link and set the **Custom Plugin URL** to `https://your-domain.com/genshin-player-role`
 3. RoleLogic will automatically register the guild/role pair
 4. Users visit the verification page, sign in with Discord (via Auth Gateway), and link their Genshin UID
