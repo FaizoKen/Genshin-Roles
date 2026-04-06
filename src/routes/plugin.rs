@@ -60,8 +60,15 @@ pub async fn get_config(
 ) -> Result<Json<Value>, AppError> {
     let token = extract_token(&headers)?;
 
-    let link = sqlx::query_as::<_, (String, sqlx::types::Json<Vec<crate::models::condition::Condition>>)>(
-        "SELECT guild_id, conditions FROM role_links WHERE api_token = $1",
+    let link = sqlx::query_as::<
+        _,
+        (
+            String,
+            sqlx::types::Json<Vec<crate::models::condition::Condition>>,
+            String,
+        ),
+    >(
+        "SELECT guild_id, conditions, view_permission FROM role_links WHERE api_token = $1",
     )
     .bind(&token)
     .fetch_optional(&state.pool)
@@ -70,7 +77,7 @@ pub async fn get_config(
 
     let verify_url = format!("{}/verify", state.config.base_url);
     let players_url = format!("{}/players/{}", state.config.base_url, link.0);
-    let schema = schema::build_config_schema(&link.1, &verify_url, &players_url);
+    let schema = schema::build_config_schema(&link.1, &verify_url, &players_url, &link.2);
 
     Ok(Json(schema))
 }
@@ -106,10 +113,25 @@ pub async fn post_config(
 
     let conditions = schema::parse_config(&body.config)?;
 
+    // Parse view_permission (default 'members'). Only 'members' and 'managers' are valid.
+    let view_permission = body
+        .config
+        .get("view_permission")
+        .and_then(|v| v.as_str())
+        .unwrap_or("members")
+        .to_string();
+    if view_permission != "members" && view_permission != "managers" {
+        return Err(AppError::BadRequest(
+            "view_permission must be 'members' or 'managers'".into(),
+        ));
+    }
+
     sqlx::query(
-        "UPDATE role_links SET conditions = $1, updated_at = now() WHERE guild_id = $2 AND role_id = $3",
+        "UPDATE role_links SET conditions = $1, view_permission = $2, updated_at = now() \
+         WHERE guild_id = $3 AND role_id = $4",
     )
     .bind(sqlx::types::Json(&conditions))
+    .bind(&view_permission)
     .bind(&body.guild_id)
     .bind(&body.role_id)
     .execute(&state.pool)

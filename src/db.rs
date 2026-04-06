@@ -62,4 +62,9 @@ pub async fn run_migrations(pool: &PgPool) {
         .execute(pool)
         .await
         .expect("Failed to run migration 010");
+
+    sqlx::raw_sql(include_str!("../migrations/011_view_permission.sql"))
+        .execute(pool)
+        .await
+        .expect("Failed to run migration 011");
 }

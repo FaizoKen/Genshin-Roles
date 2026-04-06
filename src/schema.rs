@@ -4,7 +4,12 @@ use std::collections::HashMap;
 use crate::error::AppError;
 use crate::models::condition::{Condition, ConditionField, ConditionOperator};
 
-pub fn build_config_schema(conditions: &[Condition], verify_url: &str, players_url: &str) -> Value {
+pub fn build_config_schema(
+    conditions: &[Condition],
+    verify_url: &str,
+    players_url: &str,
+    view_permission: &str,
+) -> Value {
     let c = conditions.first();
 
     let mut values = HashMap::new();
@@ -16,6 +21,7 @@ pub fn build_config_schema(conditions: &[Condition], verify_url: &str, players_u
         "operator".to_string(),
         json!(c.map(|c| c.operator.key()).unwrap_or("")),
     );
+    values.insert("view_permission".to_string(), json!(view_permission));
 
     if let Some(c) = c {
         let value_key = format!("value_{}", c.field.json_key());
@@ -90,6 +96,22 @@ pub fn build_config_schema(conditions: &[Condition], verify_url: &str, players_u
                              See all verified members for this server:\n\
                              {players_url}"
                         )
+                    }
+                ]
+            },
+            {
+                "title": "Player List Access",
+                "description": "Control who can view the verified-player list for this server. If multiple role links exist for this server, the most permissive setting applies.",
+                "fields": [
+                    {
+                        "type": "radio",
+                        "key": "view_permission",
+                        "label": "Who can view the player list",
+                        "default_value": "members",
+                        "options": [
+                            {"label": "Server members (anyone in this server)", "value": "members"},
+                            {"label": "Server managers only (requires Manage Server permission)", "value": "managers"}
+                        ]
                     }
                 ]
             },
