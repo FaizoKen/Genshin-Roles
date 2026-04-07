@@ -14,6 +14,10 @@ pub struct AppConfig {
     /// Auth Gateway's local listener (e.g. `http://localhost:8080`) so that the
     /// plugin talks to the local gateway instead of going back through Cloudflare.
     pub auth_gateway_url: String,
+    /// Shared secret for plugin → Auth Gateway server-to-server calls
+    /// (the `/auth/internal/*` endpoints). Sent in the `X-Internal-Key`
+    /// header. Must match `INTERNAL_API_KEY` on the Auth Gateway.
+    pub internal_api_key: String,
 }
 
 fn derive_origin(base_url: &str) -> String {
@@ -42,6 +46,8 @@ impl AppConfig {
             base_url,
             listen_addr: env::var("LISTEN_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_string()),
             auth_gateway_url,
+            internal_api_key: env::var("INTERNAL_API_KEY")
+                .expect("INTERNAL_API_KEY must be set (must match the Auth Gateway's value)"),
         }
     }
 }

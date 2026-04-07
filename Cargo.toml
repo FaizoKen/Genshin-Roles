@@ -2,6 +2,7 @@
 name = "genshin-roles"
 version = "0.1.0"
 edition = "2021"
+default-run = "genshin-roles"
 
 [dependencies]
 axum = { version = "0.8", features = ["macros"] }

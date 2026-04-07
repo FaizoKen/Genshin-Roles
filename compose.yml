@@ -11,6 +11,8 @@ services:
       ENKA_USER_AGENT: ${ENKA_USER_AGENT:-GenshinRoles/1.0}
       BASE_URL: ${BASE_URL}
       LISTEN_ADDR: "0.0.0.0:8080"
+      AUTH_GATEWAY_URL: ${AUTH_GATEWAY_URL}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
     depends_on:
       db:
         condition: service_healthy
