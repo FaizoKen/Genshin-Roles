@@ -323,6 +323,15 @@ pub async fn sync_for_role_link(
         return Ok(());
     };
 
+    // No conditions configured → role is unconfigured, assign to nobody.
+    if conditions.is_empty() {
+        rl_client.replace_users(guild_id, role_id, &[], &api_token).await?;
+        sqlx::query("DELETE FROM role_assignments WHERE guild_id = $1 AND role_id = $2")
+            .bind(guild_id).bind(role_id)
+            .execute(pool).await?;
+        return Ok(());
+    }
+
     // Query the user limit from RoleLogic
     let (_user_count, user_limit) = rl_client
         .get_user_info(guild_id, role_id, &api_token)

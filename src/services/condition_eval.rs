@@ -3,12 +3,16 @@ use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use crate::models::condition::{Condition, ConditionField, ConditionOperator};
 
 /// Evaluate all conditions against player data. All must pass (AND logic).
+/// Empty conditions = unconfigured → grant to nobody.
 pub fn evaluate_conditions(
     conditions: &[Condition],
     player_info: &serde_json::Value,
     region: Option<&str>,
     fetched_at: Option<DateTime<Utc>>,
 ) -> bool {
+    if conditions.is_empty() {
+        return false;
+    }
     conditions
         .iter()
         .all(|c| evaluate_single(c, player_info, region, fetched_at))
@@ -533,9 +537,9 @@ mod tests {
     }
 
     #[test]
-    fn test_empty_conditions_always_true() {
+    fn test_empty_conditions_grants_nobody() {
         let conditions: Vec<Condition> = vec![];
-        assert!(evaluate_conditions(&conditions, &sample_player_info(), None, None));
+        assert!(!evaluate_conditions(&conditions, &sample_player_info(), None, None));
     }
 
     #[test]
