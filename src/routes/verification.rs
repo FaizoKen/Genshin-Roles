@@ -17,18 +17,17 @@ const SESSION_COOKIE: &str = "rl_session";
 
 /// Returns (discord_id, display_name)
 fn get_session(jar: &CookieJar, secret: &str) -> Result<(String, String), AppError> {
-    let cookie = jar
-        .get(SESSION_COOKIE)
-        .ok_or(AppError::Unauthorized)?;
+    let cookie = jar.get(SESSION_COOKIE).ok_or(AppError::Unauthorized)?;
 
-    session::verify_session(cookie.value(), secret)
-        .ok_or(AppError::Unauthorized)
+    session::verify_session(cookie.value(), secret).ok_or(AppError::Unauthorized)
 }
 
 fn generate_code() -> String {
     let mut rng = rand::thread_rng();
     let chars: Vec<char> = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789".chars().collect();
-    let code: String = (0..6).map(|_| chars[rng.gen_range(0..chars.len())]).collect();
+    let code: String = (0..6)
+        .map(|_| chars[rng.gen_range(0..chars.len())])
+        .collect();
     format!("GR-{code}")
 }
 
@@ -489,10 +488,7 @@ pub async fn verify_page(State(state): State<Arc<AppState>>) -> impl IntoRespons
 
 pub async fn login(State(state): State<Arc<AppState>>) -> Response {
     let return_to = "/genshin-player-role/verify";
-    let url = format!(
-        "/auth/login?return_to={}",
-        urlencoding::encode(return_to),
-    );
+    let url = format!("/auth/login?return_to={}", urlencoding::encode(return_to),);
     Redirect::temporary(&url).into_response()
 }
 
@@ -502,12 +498,11 @@ pub async fn status(
 ) -> Result<Json<Value>, AppError> {
     let (discord_id, display_name) = get_session(&jar, &state.config.session_secret)?;
 
-    let account = sqlx::query_as::<_, (String,)>(
-        "SELECT uid FROM linked_accounts WHERE discord_id = $1",
-    )
-    .bind(&discord_id)
-    .fetch_optional(&state.pool)
-    .await?;
+    let account =
+        sqlx::query_as::<_, (String,)>("SELECT uid FROM linked_accounts WHERE discord_id = $1")
+            .bind(&discord_id)
+            .fetch_optional(&state.pool)
+            .await?;
 
     // Check for pending verification
     let pending = sqlx::query_as::<_, (String, String)>(
@@ -517,16 +512,17 @@ pub async fn status(
     .fetch_optional(&state.pool)
     .await?;
 
-    let mut pending_info = pending.as_ref().map(|(uid, code)| json!({"uid": uid, "code": code}));
+    let mut pending_info = pending
+        .as_ref()
+        .map(|(uid, code)| json!({"uid": uid, "code": code}));
 
     // If pending, try to get player info from cache for display
     if let Some((uid, _)) = &pending {
-        if let Ok(Some((player_info,))) = sqlx::query_as::<_, (Value,)>(
-            "SELECT player_info FROM player_cache WHERE uid = $1",
-        )
-        .bind(uid)
-        .fetch_optional(&state.pool)
-        .await
+        if let Ok(Some((player_info,))) =
+            sqlx::query_as::<_, (Value,)>("SELECT player_info FROM player_cache WHERE uid = $1")
+                .bind(uid)
+                .fetch_optional(&state.pool)
+                .await
         {
             if let Some(ref mut info) = pending_info {
                 info["nickname"] = json!(player_info.get("nickname").and_then(|v| v.as_str()));
@@ -557,12 +553,11 @@ pub async fn start(
     validate_uid(&body.uid)?;
 
     // Check if this Discord user already has a linked account
-    let existing = sqlx::query_scalar::<_, String>(
-        "SELECT uid FROM linked_accounts WHERE discord_id = $1",
-    )
-    .bind(&discord_id)
-    .fetch_optional(&state.pool)
-    .await?;
+    let existing =
+        sqlx::query_scalar::<_, String>("SELECT uid FROM linked_accounts WHERE discord_id = $1")
+            .bind(&discord_id)
+            .fetch_optional(&state.pool)
+            .await?;
 
     if let Some(uid) = existing {
         return Err(AppError::BadRequest(format!(
@@ -571,12 +566,11 @@ pub async fn start(
     }
 
     // Check if UID is linked to another user
-    let uid_taken = sqlx::query_scalar::<_, String>(
-        "SELECT discord_id FROM linked_accounts WHERE uid = $1",
-    )
-    .bind(&body.uid)
-    .fetch_optional(&state.pool)
-    .await?;
+    let uid_taken =
+        sqlx::query_scalar::<_, String>("SELECT discord_id FROM linked_accounts WHERE uid = $1")
+            .bind(&body.uid)
+            .fetch_optional(&state.pool)
+            .await?;
 
     if uid_taken.is_some() {
         return Err(AppError::BadRequest(
@@ -634,8 +628,15 @@ pub async fn start(
             .execute(&state.pool)
             .await;
 
-            let nickname = enka_result.player_info.get("nickname").and_then(|v| v.as_str()).map(String::from);
-            let level = enka_result.player_info.get("level").and_then(|v| v.as_i64());
+            let nickname = enka_result
+                .player_info
+                .get("nickname")
+                .and_then(|v| v.as_str())
+                .map(String::from);
+            let level = enka_result
+                .player_info
+                .get("level")
+                .and_then(|v| v.as_i64());
             (nickname, level)
         }
         Err(_) => (None, None),
@@ -667,7 +668,9 @@ pub async fn check(
     .bind(&discord_id)
     .fetch_optional(&state.pool)
     .await?
-    .ok_or(AppError::NotFound("No pending verification session. Start a new one.".into()))?;
+    .ok_or(AppError::NotFound(
+        "No pending verification session. Start a new one.".into(),
+    ))?;
 
     let (session_id, uid, code, attempts) = session;
 
@@ -783,13 +786,12 @@ pub async fn unlink(
 ) -> Result<Json<Value>, AppError> {
     let (discord_id, _) = get_session(&jar, &state.config.session_secret)?;
 
-    let account = sqlx::query_as::<_, (String,)>(
-        "SELECT uid FROM linked_accounts WHERE discord_id = $1",
-    )
-    .bind(&discord_id)
-    .fetch_optional(&state.pool)
-    .await?
-    .ok_or(AppError::NotFound("No linked account found".into()))?;
+    let account =
+        sqlx::query_as::<_, (String,)>("SELECT uid FROM linked_accounts WHERE discord_id = $1")
+            .bind(&discord_id)
+            .fetch_optional(&state.pool)
+            .await?
+            .ok_or(AppError::NotFound("No linked account found".into()))?;
 
     // Delete linked account
     sqlx::query("DELETE FROM linked_accounts WHERE discord_id = $1")

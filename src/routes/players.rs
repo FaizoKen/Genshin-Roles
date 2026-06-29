@@ -555,8 +555,8 @@ pub async fn players_data(
         "<short>".to_string()
     };
 
-    let (viewer_discord_id, _) =
-        verify_session(cookie_value, &state.config.session_secret).ok_or_else(|| {
+    let (viewer_discord_id, _) = verify_session(cookie_value, &state.config.session_secret)
+        .ok_or_else(|| {
             tracing::warn!(
                 guild_id,
                 cookie_len,
@@ -595,8 +595,7 @@ pub async fn players_data(
     .fetch_optional(&state.pool)
     .await?;
 
-    let (has_link, view_permission) =
-        guild_row.unwrap_or((false, "members".to_string()));
+    let (has_link, view_permission) = guild_row.unwrap_or((false, "members".to_string()));
     if !has_link {
         return Err(AppError::NotFound(
             "No player list is configured for this server.".into(),
@@ -609,8 +608,7 @@ pub async fn players_data(
     // permissions (it owns the OAuth flow and the refresh worker). The plugin's own
     // `user_guilds` table is not kept in sync with Discord and must not be relied on
     // either for authorization OR for listing players.
-    let (_, is_manager) =
-        fetch_guild_permission(&state, &guild_id, session_cookie.value()).await?;
+    let (_, is_manager) = fetch_guild_permission(&state, &guild_id, session_cookie.value()).await?;
 
     let (member_ids, ag_guild_name) =
         fetch_guild_members(&state, &guild_id, session_cookie.value()).await?;

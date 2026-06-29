@@ -37,7 +37,9 @@ impl CachedInterval {
             value: AtomicI64::new(MIN_REFRESH_SECS),
             max_req_per_hour,
             // Start in the past so the first call triggers a recompute
-            last_computed: Mutex::new(Instant::now() - std::time::Duration::from_secs(INTERVAL_CACHE_SECS + 1)),
+            last_computed: Mutex::new(
+                Instant::now() - std::time::Duration::from_secs(INTERVAL_CACHE_SECS + 1),
+            ),
         }
     }
 
@@ -52,7 +54,8 @@ impl CachedInterval {
             let interval = if player_count == 0 {
                 MIN_REFRESH_SECS
             } else {
-                ((player_count * 3600) / self.max_req_per_hour).clamp(MIN_REFRESH_SECS, MAX_REFRESH_SECS)
+                ((player_count * 3600) / self.max_req_per_hour)
+                    .clamp(MIN_REFRESH_SECS, MAX_REFRESH_SECS)
             };
 
             self.value.store(interval, Ordering::Relaxed);

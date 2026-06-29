@@ -16,6 +16,9 @@ pub enum AppError {
     #[error("Role link not found on RoleLogic")]
     RoleLinkNotFound,
 
+    #[error("Role link is disabled on RoleLogic")]
+    RoleLinkDisabled,
+
     #[error("Role link user limit reached ({limit})")]
     UserLimitReached { limit: usize },
 
@@ -64,33 +67,43 @@ impl IntoResponse for AppError {
                 tracing::error!("Database error: {e}");
                 (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error")
             }
-            AppError::Enka(EnkaError::BadUid) => {
-                (StatusCode::BAD_REQUEST, "Invalid UID. Please check and try again.")
-            }
-            AppError::Enka(EnkaError::NotFound) => {
-                (StatusCode::NOT_FOUND, "Player not found. Make sure your UID is correct and your profile is public.")
-            }
-            AppError::Enka(EnkaError::RateLimited) => {
-                (StatusCode::TOO_MANY_REQUESTS, "Too many requests. Please wait a moment and try again.")
-            }
-            AppError::Enka(EnkaError::Maintenance) => {
-                (StatusCode::SERVICE_UNAVAILABLE, "Game data is temporarily unavailable (maintenance). Please try again later.")
-            }
+            AppError::Enka(EnkaError::BadUid) => (
+                StatusCode::BAD_REQUEST,
+                "Invalid UID. Please check and try again.",
+            ),
+            AppError::Enka(EnkaError::NotFound) => (
+                StatusCode::NOT_FOUND,
+                "Player not found. Make sure your UID is correct and your profile is public.",
+            ),
+            AppError::Enka(EnkaError::RateLimited) => (
+                StatusCode::TOO_MANY_REQUESTS,
+                "Too many requests. Please wait a moment and try again.",
+            ),
+            AppError::Enka(EnkaError::Maintenance) => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Game data is temporarily unavailable (maintenance). Please try again later.",
+            ),
             AppError::Enka(e) => {
                 tracing::error!("Enka API error: {e}");
-                (StatusCode::BAD_GATEWAY, "Failed to fetch player data. Please try again later.")
+                (
+                    StatusCode::BAD_GATEWAY,
+                    "Failed to fetch player data. Please try again later.",
+                )
             }
             AppError::RoleLogic(e) => {
                 tracing::error!("RoleLogic API error: {e}");
                 (StatusCode::BAD_GATEWAY, "Failed to sync roles")
             }
             AppError::RoleLinkNotFound => (StatusCode::NOT_FOUND, "Role link not found"),
+            AppError::RoleLinkDisabled => (StatusCode::FORBIDDEN, "Role link is disabled"),
             AppError::UserLimitReached { limit } => {
                 tracing::warn!("Role link user limit reached: {limit}");
                 (StatusCode::FORBIDDEN, "Role link user limit reached")
             }
             AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.as_str()),
-            AppError::Unauthorized => (StatusCode::UNAUTHORIZED, "Invalid or missing authorization"),
+            AppError::Unauthorized => {
+                (StatusCode::UNAUTHORIZED, "Invalid or missing authorization")
+            }
             AppError::UnauthorizedWith(msg) => (StatusCode::UNAUTHORIZED, msg.as_str()),
             AppError::Forbidden(msg) => (StatusCode::FORBIDDEN, msg.as_str()),
             AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.as_str()),

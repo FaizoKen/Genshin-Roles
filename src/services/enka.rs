@@ -12,7 +12,13 @@ pub struct EnkaResponse {
 
 pub struct EnkaClient {
     http: reqwest::Client,
-    rate_limiter: Arc<RateLimiter<governor::state::NotKeyed, governor::state::InMemoryState, governor::clock::DefaultClock>>,
+    rate_limiter: Arc<
+        RateLimiter<
+            governor::state::NotKeyed,
+            governor::state::InMemoryState,
+            governor::clock::DefaultClock,
+        >,
+    >,
 }
 
 impl EnkaClient {
@@ -50,7 +56,10 @@ impl EnkaClient {
 
         let mut body: serde_json::Value = resp.json().await?;
 
-        let region = body.get("region").and_then(|v| v.as_str()).map(String::from);
+        let region = body
+            .get("region")
+            .and_then(|v| v.as_str())
+            .map(String::from);
         let ttl = body.get("ttl").and_then(|v| v.as_i64()).unwrap_or(60) as i32;
 
         let player_info = body

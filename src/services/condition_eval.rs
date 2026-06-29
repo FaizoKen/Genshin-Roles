@@ -94,7 +94,12 @@ fn evaluate_single(
     }
 }
 
-fn compare(actual: i64, expected: i64, operator: &ConditionOperator, value_end: &Option<serde_json::Value>) -> bool {
+fn compare(
+    actual: i64,
+    expected: i64,
+    operator: &ConditionOperator,
+    value_end: &Option<serde_json::Value>,
+) -> bool {
     match operator {
         ConditionOperator::Eq => actual == expected,
         ConditionOperator::Gt => actual > expected,
@@ -102,7 +107,10 @@ fn compare(actual: i64, expected: i64, operator: &ConditionOperator, value_end: 
         ConditionOperator::Lt => actual < expected,
         ConditionOperator::Lte => actual <= expected,
         ConditionOperator::Between => {
-            let end = value_end.as_ref().and_then(|v| v.as_i64()).unwrap_or(expected);
+            let end = value_end
+                .as_ref()
+                .and_then(|v| v.as_i64())
+                .unwrap_or(expected);
             actual >= expected && actual <= end
         }
     }
@@ -152,10 +160,8 @@ pub fn last_abyss_reset_utc(region: &str) -> DateTime<Utc> {
 
     let reset_time = NaiveTime::from_hms_opt(reset_hour_utc, 0, 0).unwrap();
 
-    let candidate_1 = NaiveDateTime::new(reset_day_1, reset_time)
-        .and_utc();
-    let candidate_0 = NaiveDateTime::new(reset_day_0, reset_time)
-        .and_utc();
+    let candidate_1 = NaiveDateTime::new(reset_day_1, reset_time).and_utc();
+    let candidate_0 = NaiveDateTime::new(reset_day_0, reset_time).and_utc();
 
     if now >= candidate_1 {
         candidate_1
@@ -164,12 +170,16 @@ pub fn last_abyss_reset_utc(region: &str) -> DateTime<Utc> {
     } else {
         // Before the first reset of this month — use the 16th reset of the previous month
         let prev_reset_day = if prev_day {
-            let prev_month_date = NaiveDate::from_ymd_opt(year, month, 1).unwrap()
-                .pred_opt().unwrap(); // last day of prev month
+            let prev_month_date = NaiveDate::from_ymd_opt(year, month, 1)
+                .unwrap()
+                .pred_opt()
+                .unwrap(); // last day of prev month
             NaiveDate::from_ymd_opt(prev_month_date.year(), prev_month_date.month(), 15).unwrap()
         } else {
-            let prev_month_date = NaiveDate::from_ymd_opt(year, month, 1).unwrap()
-                .pred_opt().unwrap();
+            let prev_month_date = NaiveDate::from_ymd_opt(year, month, 1)
+                .unwrap()
+                .pred_opt()
+                .unwrap();
             NaiveDate::from_ymd_opt(prev_month_date.year(), prev_month_date.month(), 16).unwrap()
         };
         NaiveDateTime::new(prev_reset_day, reset_time).and_utc()
@@ -213,7 +223,12 @@ mod tests {
             avatar_level: None,
             avatar_constellation: None,
         }];
-        assert!(evaluate_conditions(&conditions, &sample_player_info(), Some("NA"), None));
+        assert!(evaluate_conditions(
+            &conditions,
+            &sample_player_info(),
+            Some("NA"),
+            None
+        ));
     }
 
     #[test]
@@ -226,7 +241,12 @@ mod tests {
             avatar_level: None,
             avatar_constellation: None,
         }];
-        assert!(!evaluate_conditions(&conditions, &sample_player_info(), Some("NA"), None));
+        assert!(!evaluate_conditions(
+            &conditions,
+            &sample_player_info(),
+            Some("NA"),
+            None
+        ));
     }
 
     #[test]
@@ -239,8 +259,18 @@ mod tests {
             avatar_level: None,
             avatar_constellation: None,
         }];
-        assert!(evaluate_conditions(&conditions, &sample_player_info(), Some("NA"), None));
-        assert!(!evaluate_conditions(&conditions, &sample_player_info(), Some("EU"), None));
+        assert!(evaluate_conditions(
+            &conditions,
+            &sample_player_info(),
+            Some("NA"),
+            None
+        ));
+        assert!(!evaluate_conditions(
+            &conditions,
+            &sample_player_info(),
+            Some("EU"),
+            None
+        ));
     }
 
     #[test]
@@ -253,7 +283,12 @@ mod tests {
             avatar_level: None,
             avatar_constellation: None,
         }];
-        assert!(evaluate_conditions(&conditions, &sample_player_info(), None, None));
+        assert!(evaluate_conditions(
+            &conditions,
+            &sample_player_info(),
+            None,
+            None
+        ));
     }
 
     #[test]
@@ -266,7 +301,12 @@ mod tests {
             avatar_level: None,
             avatar_constellation: None,
         }];
-        assert!(!evaluate_conditions(&conditions, &sample_player_info(), None, None));
+        assert!(!evaluate_conditions(
+            &conditions,
+            &sample_player_info(),
+            None,
+            None
+        ));
     }
 
     #[test]
@@ -279,7 +319,12 @@ mod tests {
             avatar_level: None,
             avatar_constellation: None,
         }];
-        assert!(evaluate_conditions(&conditions, &sample_player_info(), None, None));
+        assert!(evaluate_conditions(
+            &conditions,
+            &sample_player_info(),
+            None,
+            None
+        ));
     }
 
     #[test]
@@ -310,7 +355,12 @@ mod tests {
                 avatar_constellation: None,
             },
         ];
-        assert!(evaluate_conditions(&conditions, &sample_player_info(), Some("NA"), None));
+        assert!(evaluate_conditions(
+            &conditions,
+            &sample_player_info(),
+            Some("NA"),
+            None
+        ));
     }
 
     #[test]
@@ -333,7 +383,12 @@ mod tests {
                 avatar_constellation: None,
             },
         ];
-        assert!(!evaluate_conditions(&conditions, &sample_player_info(), Some("NA"), None));
+        assert!(!evaluate_conditions(
+            &conditions,
+            &sample_player_info(),
+            Some("NA"),
+            None
+        ));
     }
 
     #[test]
@@ -348,7 +403,12 @@ mod tests {
             avatar_constellation: None,
         }];
         // No fetched_at → freshness check skipped
-        assert!(evaluate_conditions(&conditions, &sample_player_info(), Some("NA"), None));
+        assert!(evaluate_conditions(
+            &conditions,
+            &sample_player_info(),
+            Some("NA"),
+            None
+        ));
     }
 
     #[test]
@@ -361,7 +421,12 @@ mod tests {
             avatar_level: None,
             avatar_constellation: None,
         }];
-        assert!(evaluate_conditions(&conditions, &sample_player_info(), Some("NA"), None));
+        assert!(evaluate_conditions(
+            &conditions,
+            &sample_player_info(),
+            Some("NA"),
+            None
+        ));
     }
 
     #[test]
@@ -374,7 +439,12 @@ mod tests {
             avatar_level: None,
             avatar_constellation: None,
         }];
-        assert!(!evaluate_conditions(&conditions, &sample_player_info(), Some("NA"), None));
+        assert!(!evaluate_conditions(
+            &conditions,
+            &sample_player_info(),
+            Some("NA"),
+            None
+        ));
     }
 
     #[test]
@@ -429,7 +499,12 @@ mod tests {
             avatar_level: None,
             avatar_constellation: None,
         }];
-        assert!(evaluate_conditions(&conditions, &sample_player_info(), Some("NA"), None));
+        assert!(evaluate_conditions(
+            &conditions,
+            &sample_player_info(),
+            Some("NA"),
+            None
+        ));
     }
 
     #[test]
@@ -442,7 +517,12 @@ mod tests {
             avatar_level: None,
             avatar_constellation: None,
         }];
-        assert!(!evaluate_conditions(&conditions, &sample_player_info(), Some("NA"), None));
+        assert!(!evaluate_conditions(
+            &conditions,
+            &sample_player_info(),
+            Some("NA"),
+            None
+        ));
     }
 
     #[test]
@@ -491,7 +571,12 @@ mod tests {
             avatar_level: None,
             avatar_constellation: None,
         }];
-        assert!(evaluate_conditions(&conditions, &sample_player_info(), Some("NA"), None));
+        assert!(evaluate_conditions(
+            &conditions,
+            &sample_player_info(),
+            Some("NA"),
+            None
+        ));
     }
 
     #[test]
@@ -505,7 +590,12 @@ mod tests {
             avatar_level: None,
             avatar_constellation: None,
         }];
-        assert!(!evaluate_conditions(&conditions, &sample_player_info(), Some("NA"), None));
+        assert!(!evaluate_conditions(
+            &conditions,
+            &sample_player_info(),
+            Some("NA"),
+            None
+        ));
     }
 
     #[test]
@@ -519,7 +609,12 @@ mod tests {
             avatar_level: None,
             avatar_constellation: None,
         }];
-        assert!(evaluate_conditions(&conditions, &sample_player_info(), Some("NA"), None));
+        assert!(evaluate_conditions(
+            &conditions,
+            &sample_player_info(),
+            Some("NA"),
+            None
+        ));
     }
 
     #[test]
@@ -533,13 +628,23 @@ mod tests {
             avatar_level: None,
             avatar_constellation: None,
         }];
-        assert!(evaluate_conditions(&conditions, &sample_player_info(), Some("NA"), None));
+        assert!(evaluate_conditions(
+            &conditions,
+            &sample_player_info(),
+            Some("NA"),
+            None
+        ));
     }
 
     #[test]
     fn test_empty_conditions_grants_nobody() {
         let conditions: Vec<Condition> = vec![];
-        assert!(!evaluate_conditions(&conditions, &sample_player_info(), None, None));
+        assert!(!evaluate_conditions(
+            &conditions,
+            &sample_player_info(),
+            None,
+            None
+        ));
     }
 
     #[test]
@@ -559,7 +664,12 @@ mod tests {
             avatar_level: Some(90),
             avatar_constellation: None,
         }];
-        assert!(evaluate_conditions(&conditions, &sample_player_info(), None, None));
+        assert!(evaluate_conditions(
+            &conditions,
+            &sample_player_info(),
+            None,
+            None
+        ));
     }
 
     #[test]
@@ -573,7 +683,12 @@ mod tests {
             avatar_level: Some(90),
             avatar_constellation: None,
         }];
-        assert!(!evaluate_conditions(&conditions, &sample_player_info(), None, None));
+        assert!(!evaluate_conditions(
+            &conditions,
+            &sample_player_info(),
+            None,
+            None
+        ));
     }
 
     #[test]
@@ -587,7 +702,12 @@ mod tests {
             avatar_level: None,
             avatar_constellation: Some(2),
         }];
-        assert!(evaluate_conditions(&conditions, &sample_player_info(), None, None));
+        assert!(evaluate_conditions(
+            &conditions,
+            &sample_player_info(),
+            None,
+            None
+        ));
     }
 
     #[test]
@@ -601,7 +721,12 @@ mod tests {
             avatar_level: None,
             avatar_constellation: Some(3),
         }];
-        assert!(!evaluate_conditions(&conditions, &sample_player_info(), None, None));
+        assert!(!evaluate_conditions(
+            &conditions,
+            &sample_player_info(),
+            None,
+            None
+        ));
     }
 
     #[test]
@@ -615,7 +740,12 @@ mod tests {
             avatar_level: Some(90),
             avatar_constellation: Some(2),
         }];
-        assert!(evaluate_conditions(&conditions, &sample_player_info(), None, None));
+        assert!(evaluate_conditions(
+            &conditions,
+            &sample_player_info(),
+            None,
+            None
+        ));
     }
 
     #[test]
@@ -629,7 +759,12 @@ mod tests {
             avatar_level: None,
             avatar_constellation: Some(1),
         }];
-        assert!(!evaluate_conditions(&conditions, &sample_player_info(), None, None));
+        assert!(!evaluate_conditions(
+            &conditions,
+            &sample_player_info(),
+            None,
+            None
+        ));
     }
 
     #[test]
@@ -643,6 +778,11 @@ mod tests {
             avatar_level: None,
             avatar_constellation: None,
         }];
-        assert!(evaluate_conditions(&conditions, &sample_player_info(), None, None));
+        assert!(evaluate_conditions(
+            &conditions,
+            &sample_player_info(),
+            None,
+            None
+        ));
     }
 }

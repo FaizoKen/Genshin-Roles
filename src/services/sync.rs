@@ -27,15 +27,19 @@ pub struct ConfigSyncEvent {
 /// Sync roles for a single player across all guilds.
 /// Evaluates conditions locally (microseconds per role link), then executes
 /// RoleLogic API calls concurrently for any changes needed.
-pub async fn sync_for_player(
-    discord_id: &str,
-    state: &AppState,
-) -> Result<(), AppError> {
+pub async fn sync_for_player(discord_id: &str, state: &AppState) -> Result<(), AppError> {
     let pool = &state.pool;
     let rl_client = &state.rl_client;
 
     // Get player's cached data
-    let cache = sqlx::query_as::<_, (serde_json::Value, Option<String>, chrono::DateTime<chrono::Utc>)>(
+    let cache = sqlx::query_as::<
+        _,
+        (
+            serde_json::Value,
+            Option<String>,
+            chrono::DateTime<chrono::Utc>,
+        ),
+    >(
         "SELECT pc.player_info, pc.region, pc.fetched_at FROM player_cache pc \
          JOIN linked_accounts la ON la.uid = pc.uid \
          WHERE la.discord_id = $1",
@@ -66,14 +70,15 @@ pub async fn sync_for_player(
     }
 
     // Get role links only for guilds this user is a member of
-    let role_links = sqlx::query_as::<_, (String, String, String, sqlx::types::Json<Vec<Condition>>)>(
-        "SELECT rl.guild_id, rl.role_id, rl.api_token, rl.conditions \
+    let role_links =
+        sqlx::query_as::<_, (String, String, String, sqlx::types::Json<Vec<Condition>>)>(
+            "SELECT rl.guild_id, rl.role_id, rl.api_token, rl.conditions \
          FROM role_links rl \
          WHERE rl.guild_id = ANY($1)",
-    )
-    .bind(&guild_ids[..])
-    .fetch_all(pool)
-    .await?;
+        )
+        .bind(&guild_ids[..])
+        .fetch_all(pool)
+        .await?;
 
     // Batch: fetch all existing assignments for this user in ONE query
     let existing: HashSet<(String, String)> = sqlx::query_as::<_, (String, String)>(
@@ -87,13 +92,26 @@ pub async fn sync_for_player(
 
     // Phase 1: evaluate all conditions locally (no I/O, microseconds each)
     enum Action {
-        Add { guild_id: String, role_id: String, api_token: String },
-        Remove { guild_id: String, role_id: String, api_token: String },
+        Add {
+            guild_id: String,
+            role_id: String,
+            api_token: String,
+        },
+        Remove {
+            guild_id: String,
+            role_id: String,
+            api_token: String,
+        },
     }
 
     let mut actions: Vec<Action> = Vec::new();
     for (guild_id, role_id, api_token, conditions) in &role_links {
-        let qualifies = evaluate_conditions(conditions, &player_info, region.as_deref(), Some(fetched_at));
+        let qualifies = evaluate_conditions(
+            conditions,
+            &player_info,
+            region.as_deref(),
+            Some(fetched_at),
+        );
         let currently_assigned = existing.contains(&(guild_id.clone(), role_id.clone()));
         match (qualifies, currently_assigned) {
             (true, false) => actions.push(Action::Add {
@@ -211,7 +229,8 @@ fn build_condition_where(conditions: &[Condition]) -> (String, Vec<ConditionBind
             }
             ConditionField::HasAvatar => {
                 let id = condition.value.as_i64().unwrap_or(0);
-                let has_sub_filters = condition.avatar_level.is_some() || condition.avatar_constellation.is_some();
+                let has_sub_filters =
+                    condition.avatar_level.is_some() || condition.avatar_constellation.is_some();
                 if has_sub_filters {
                     // Use EXISTS with jsonb_array_elements to check avatar ID + level/constellation
                     let mut sub_clauses = vec![];
@@ -225,7 +244,9 @@ fn build_condition_where(conditions: &[Condition]) -> (String, Vec<ConditionBind
                     }
                     if let Some(min_const) = condition.avatar_constellation {
                         let idx = binds.len() + 1;
-                        sub_clauses.push(format!("COALESCE((elem->>'talentLevel')::int, 0) >= ${idx}"));
+                        sub_clauses.push(format!(
+                            "COALESCE((elem->>'talentLevel')::int, 0) >= ${idx}"
+                        ));
                         binds.push(ConditionBind::Int(min_const));
                     }
                     let sub_where = sub_clauses.join(" AND ");
@@ -251,8 +272,15 @@ fn build_condition_where(conditions: &[Condition]) -> (String, Vec<ConditionBind
             ConditionField::SpiralAbyss | ConditionField::TowerStarIndex => {
                 let col = condition.field.sql_column().unwrap();
                 let val = condition.value.as_i64().unwrap_or(0);
-                if matches!(condition.operator, crate::models::condition::ConditionOperator::Between) {
-                    let end = condition.value_end.as_ref().and_then(|v| v.as_i64()).unwrap_or(val);
+                if matches!(
+                    condition.operator,
+                    crate::models::condition::ConditionOperator::Between
+                ) {
+                    let end = condition
+                        .value_end
+                        .as_ref()
+                        .and_then(|v| v.as_i64())
+                        .unwrap_or(val);
                     let idx_start = binds.len() + 1;
                     let idx_end = binds.len() + 2;
                     clauses.push(format!("{col} >= ${idx_start} AND {col} <= ${idx_end}"));
@@ -284,8 +312,15 @@ fn build_condition_where(conditions: &[Condition]) -> (String, Vec<ConditionBind
             numeric_field => {
                 let col = numeric_field.sql_column().unwrap(); // safe: Region, SpiralAbyss handled above
                 let val = condition.value.as_i64().unwrap_or(0);
-                if matches!(condition.operator, crate::models::condition::ConditionOperator::Between) {
-                    let end = condition.value_end.as_ref().and_then(|v| v.as_i64()).unwrap_or(val);
+                if matches!(
+                    condition.operator,
+                    crate::models::condition::ConditionOperator::Between
+                ) {
+                    let end = condition
+                        .value_end
+                        .as_ref()
+                        .and_then(|v| v.as_i64())
+                        .unwrap_or(val);
                     let idx_start = binds.len() + 1;
                     let idx_end = binds.len() + 2;
                     clauses.push(format!("{col} >= ${idx_start} AND {col} <= ${idx_end}"));
@@ -336,7 +371,10 @@ pub async fn sync_for_role_link(
 
     // No conditions configured → role is unconfigured, assign to nobody.
     if conditions.is_empty() {
-        match rl_client.upload_users(guild_id, role_id, &[], &api_token).await {
+        match rl_client
+            .upload_users(guild_id, role_id, &[], &api_token)
+            .await
+        {
             Ok(_) => {}
             Err(AppError::RoleLinkNotFound) => {
                 delete_orphan_role_link(guild_id, role_id, pool).await;
@@ -345,23 +383,24 @@ pub async fn sync_for_role_link(
             Err(e) => return Err(e),
         }
         sqlx::query("DELETE FROM role_assignments WHERE guild_id = $1 AND role_id = $2")
-            .bind(guild_id).bind(role_id)
-            .execute(pool).await?;
+            .bind(guild_id)
+            .bind(role_id)
+            .execute(pool)
+            .await?;
         return Ok(());
     }
 
     // Query the user limit from RoleLogic
-    let (_user_count, user_limit) = match rl_client
-        .get_user_info(guild_id, role_id, &api_token)
-        .await
-    {
-        Ok(v) => v,
-        Err(AppError::RoleLinkNotFound) => {
-            delete_orphan_role_link(guild_id, role_id, pool).await;
-            return Ok(());
-        }
-        Err(_) => (0, 100), // Default to 100 (free plan) if query fails
-    };
+    let (_user_count, user_limit) =
+        match rl_client.get_user_info(guild_id, role_id, &api_token).await {
+            Ok(v) => v,
+            Err(AppError::RoleLinkNotFound) => {
+                delete_orphan_role_link(guild_id, role_id, pool).await;
+                return Ok(());
+            }
+            Err(AppError::RoleLinkDisabled) => return Ok(()),
+            Err(e) => return Err(e),
+        };
 
     // Ask the Auth Gateway for the current member list of this guild.
     // Replaces the old JOIN against the local `user_guilds` table.
@@ -523,10 +562,7 @@ async fn exec_condition_count(
 }
 
 /// Remove a user from all role assignments (after account unlink).
-pub async fn remove_all_assignments(
-    discord_id: &str,
-    state: &AppState,
-) -> Result<(), AppError> {
+pub async fn remove_all_assignments(discord_id: &str, state: &AppState) -> Result<(), AppError> {
     let pool = &state.pool;
     let rl_client = &state.rl_client;
     let assignments = sqlx::query_as::<_, (String, String, String)>(
@@ -550,7 +586,9 @@ pub async fn remove_all_assignments(
             }
             Err(e) => {
                 tracing::error!(
-                    guild_id, role_id, discord_id,
+                    guild_id,
+                    role_id,
+                    discord_id,
                     "Failed to remove user during unlink: {e}"
                 );
             }

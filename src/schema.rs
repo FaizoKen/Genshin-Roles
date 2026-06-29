@@ -312,10 +312,7 @@ pub fn build_config_schema(
 }
 
 pub fn parse_config(config: &HashMap<String, Value>) -> Result<Vec<Condition>, AppError> {
-    let field_key = config
-        .get("field")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
+    let field_key = config.get("field").and_then(|v| v.as_str()).unwrap_or("");
 
     if field_key.is_empty() {
         return Err(AppError::BadRequest("Field is required".into()));
@@ -344,9 +341,7 @@ pub fn parse_config(config: &HashMap<String, Value>) -> Result<Vec<Condition>, A
 
     // Prefer field-specific value key (e.g. value_level), fall back to generic "value"
     let specific_key = format!("value_{field_key}");
-    let raw_value = config
-        .get(&specific_key)
-        .or_else(|| config.get("value"));
+    let raw_value = config.get(&specific_key).or_else(|| config.get("value"));
 
     let value_str = raw_value
         .and_then(|v| match v {
@@ -370,7 +365,13 @@ pub fn parse_config(config: &HashMap<String, Value>) -> Result<Vec<Condition>, A
     }
 
     if operator == ConditionOperator::Between
-        && matches!(field, ConditionField::Region | ConditionField::HasAvatar | ConditionField::HasNameCard | ConditionField::FetterCount)
+        && matches!(
+            field,
+            ConditionField::Region
+                | ConditionField::HasAvatar
+                | ConditionField::HasNameCard
+                | ConditionField::FetterCount
+        )
     {
         return Err(AppError::BadRequest(
             "Between is not supported for this field".into(),
@@ -385,12 +386,14 @@ pub fn parse_config(config: &HashMap<String, Value>) -> Result<Vec<Condition>, A
                 "Spiral Abyss value must be in floor-chamber format (e.g. 12-3)".into(),
             ));
         }
-        let floor: i64 = parts[0].trim().parse().map_err(|_| {
-            AppError::BadRequest("Floor must be a number (e.g. 12-3)".into())
-        })?;
-        let chamber: i64 = parts[1].trim().parse().map_err(|_| {
-            AppError::BadRequest("Chamber must be a number (e.g. 12-3)".into())
-        })?;
+        let floor: i64 = parts[0]
+            .trim()
+            .parse()
+            .map_err(|_| AppError::BadRequest("Floor must be a number (e.g. 12-3)".into()))?;
+        let chamber: i64 = parts[1]
+            .trim()
+            .parse()
+            .map_err(|_| AppError::BadRequest("Chamber must be a number (e.g. 12-3)".into()))?;
         if !(1..=12).contains(&floor) || !(1..=3).contains(&chamber) {
             return Err(AppError::BadRequest(
                 "Floor must be 1-12 and chamber must be 1-3".into(),
@@ -407,9 +410,11 @@ pub fn parse_config(config: &HashMap<String, Value>) -> Result<Vec<Condition>, A
         serde_json::Value::String(v)
     } else {
         // Numeric fields: accept both JSON number and string
-        let n = value_num.or_else(|| value_str.parse::<i64>().ok()).ok_or_else(|| {
-            AppError::BadRequest(format!("Value must be a number for '{field_key}'"))
-        })?;
+        let n = value_num
+            .or_else(|| value_str.parse::<i64>().ok())
+            .ok_or_else(|| {
+                AppError::BadRequest(format!("Value must be a number for '{field_key}'"))
+            })?;
         serde_json::Value::Number(n.into())
     };
 
@@ -430,7 +435,9 @@ pub fn parse_config(config: &HashMap<String, Value>) -> Result<Vec<Condition>, A
         let end_num = raw_end.and_then(|v| v.as_i64());
 
         if end_str.is_empty() && end_num.is_none() {
-            return Err(AppError::BadRequest("End value is required for between operator".into()));
+            return Err(AppError::BadRequest(
+                "End value is required for between operator".into(),
+            ));
         }
 
         let end_val = if matches!(field, ConditionField::SpiralAbyss) {
@@ -453,9 +460,11 @@ pub fn parse_config(config: &HashMap<String, Value>) -> Result<Vec<Condition>, A
             }
             serde_json::Value::Number((floor * 10 + chamber).into())
         } else {
-            let n = end_num.or_else(|| end_str.parse::<i64>().ok()).ok_or_else(|| {
-                AppError::BadRequest(format!("End value must be a number for '{field_key}'"))
-            })?;
+            let n = end_num
+                .or_else(|| end_str.parse::<i64>().ok())
+                .ok_or_else(|| {
+                    AppError::BadRequest(format!("End value must be a number for '{field_key}'"))
+                })?;
             serde_json::Value::Number(n.into())
         };
 

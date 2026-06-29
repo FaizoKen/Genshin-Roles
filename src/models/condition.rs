@@ -16,7 +16,10 @@ pub enum ConditionField {
 
 impl ConditionField {
     pub fn is_numeric(&self) -> bool {
-        !matches!(self, Self::Region | Self::HasAvatar | Self::HasNameCard | Self::SpiralAbyss)
+        !matches!(
+            self,
+            Self::Region | Self::HasAvatar | Self::HasNameCard | Self::SpiralAbyss
+        )
     }
 
     pub fn json_key(&self) -> &'static str {
