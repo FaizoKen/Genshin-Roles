@@ -113,6 +113,7 @@ async fn main() {
                 )
                 // Health & static
                 .route("/favicon.ico", get(routes::health::favicon))
+                .route("/dweeb/status", get(routes::dweeb::status))
                 .route("/health", get(routes::health::health)),
         )
         .layer(TraceLayer::new_for_http())
