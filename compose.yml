@@ -64,11 +64,19 @@ services:
     entrypoint: |
       bash -c '
       while true; do
-        echo "[$(date)] Running database backup..."
-        pg_dump -h db -U gr genshin_roles | gzip > /backups/genshin_roles-$(date +%F_%H-%M-%S).sql.gz
-        echo "[$(date)] Backup complete."
-        find /backups -type f -mtime +7 -delete
-        sleep 24h
+        ts=$$(date +%F_%H-%M-%S)
+        out=/backups/genshin_roles-$$ts.sql.gz
+        echo "[$$(date)] Running database backup..."
+        if (set -o pipefail; pg_dump -h db -U gr genshin_roles | gzip > "$$out.partial") && gzip -t "$$out.partial"; then
+          mv "$$out.partial" "$$out"
+          echo "[$$(date)] Backup complete: $$out ($$(stat -c %s "$$out") bytes)."
+          find /backups -type f -mtime +7 -delete
+          sleep 24h
+        else
+          rm -f "$$out.partial"
+          echo "[$$(date)] ERROR: genshin_roles backup failed (see above). Older backups kept; retrying in 1h."
+          sleep 1h
+        fi
       done
       '
 
