@@ -77,4 +77,9 @@ pub async fn run_migrations(pool: &PgPool) {
         .execute(pool)
         .await
         .expect("Failed to run migration 013");
+
+    sqlx::raw_sql(include_str!("../migrations/014_held_rechecks.sql"))
+        .execute(pool)
+        .await
+        .expect("Failed to run migration 014");
 }
